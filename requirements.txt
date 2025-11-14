@@ -1,6 +1,7 @@
 torch
 torchvision
-fastapi
-uvicorn
+fastapi[standard]
+pydantic
+uvicorn[standard]
 google-genai
 tinydb
