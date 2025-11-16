@@ -13,10 +13,19 @@ from io import BytesIO
 # Librerías de terceros - FastAPI
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Librerías de terceros - Base de datos
 from tinydb import TinyDB, Query
+
+# Esquemas de la aplicación
+from schemas import (
+    DiaryEntry,
+    GeminiResponseModel,
+    GeminiBaseResponse,
+    ImageInput,
+    PromptInput
+)
 
 # Librerías de terceros - Procesamiento de imágenes y ML
 from PIL import Image
@@ -44,27 +53,6 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # Configurar logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# ============================================================================
-# MODELOS DE DATOS (PYDANTIC)
-# ============================================================================
-
-class DiaryEntry(BaseModel):
-    """Modelo para entrada de diario del usuario"""
-    mood: str  # Estado de ánimo del usuario
-    note: str | None  # Nota opcional del usuario
-    img: str | None  # Imagen en base64 (opcional)
-
-class GeminiResponseModel(BaseModel):
-    """Modelo para respuesta estructurada de Gemini AI"""
-    message: str = Field(description="Mensaje motivador general")
-    recommendation: str = Field(description="Recomendación para el usuario")
-    interesting_fact: str = Field(description="Dato curioso para el usuario relacionado con su día")
-
-class ImageInput(BaseModel):
-    """Modelo para entrada de predicción de imagen"""
-    date: str  # Fecha en formato YYYY-MM-DD
-    img: str   # Imagen codificada en base64
 
 # ============================================================================
 # FUNCIONES DE IA GENERATIVA
@@ -308,6 +296,52 @@ async def predict_image(input: ImageInput):
         logger.error(f"Error de predicción: {e}")
         raise HTTPException(status_code=400, detail="Imagen/fecha inválida o error en predicción")
 
+@app.post("/prompt")
+async def generate_prompt_response(prompt: PromptInput):
+    """
+    Genera una respuesta estructurada usando Gemini AI basada en el prompt proporcionado.
+
+    Args:
+        prompt (str): El texto del prompt a enviar
+
+    Returns:
+        JSONResponse: Respuesta generada por Gemini AI
+
+    Raises:
+        HTTPException: Error 400 si hay un error en la generación de la respuesta
+    """
+    try:
+        # Obtener fecha de inicio de la semana (lunes)
+        today = datetime.date.today()
+        start_of_week = today - datetime.timedelta(days=today.weekday())
+
+        # Filtrar entradas de la semana actual y extraer solo mood, note e img
+        diary_entries = [
+            {
+                "mood": entry.get("mood"),
+                "note": entry.get("note"),
+                "img": entry.get("img")
+            }
+            for entry in db.all()
+            if entry.get("date") and datetime.date.fromisoformat(entry.get("date")) >= start_of_week
+        ]
+
+        structured_prompt = """
+        Eres un acompañante emocional llamado Mr. Zorro
+        que genera respuestas motivadoras y positivas.
+        Basándote en el siguiente prompt del usuario y las entradas a su diario,
+        genera una respuesta breve y alentadora. Las entradas del diario están en formato JSON,
+        corresponden a la semana acutal
+        y contienen el estado de ánimo, nota e imagen etiquetada del usuario.
+        Tu respuesta debe ser en español y no debe exceder 100 palabras.
+        Usuario: {user_prompt}
+        Entradas del diario: {diary_entries}
+        """.format(user_prompt=prompt, diary_entries=json.dumps(diary_entries, ensure_ascii=False))
+        response = prompt_gemini(structured_prompt, GeminiBaseResponse)
+        return JSONResponse(content=response.model_dump())
+    except Exception as e:
+        logger.error(f"Error de predicción: {e}")
+        raise HTTPException(status_code=400, detail="Error en generación de respuesta")
 # ============================================================================
 # PUNTO DE ENTRADA DE LA APLICACIÓN
 # ============================================================================
