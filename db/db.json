@@ -10,13 +10,13 @@
         "2": {
             "date": "2025-11-15",
             "overview": {
-                "message": "\u00a1Hola, amigo! Lamento que hoy haya sido un d\u00eda triste. Recuerda que la tristeza es v\u00e1lida, pero siempre hay luz. Ma\u00f1ana es un nuevo comienzo. \u00a1No te rindas!",
-                "recommendation": "Ma\u00f1ana, intenta acercarte a alguien nuevo o dedica tiempo a una actividad que disfrutes solo, como leer un libro o dibujar. Peque\u00f1os pasos pueden hacer una gran diferencia.",
-                "interesting_fact": "Un dato curioso es que la amistad es tan poderosa que incluso los \u00e1rboles en un bosque se apoyan a trav\u00e9s de sus ra\u00edces, \u00a1creando una red incre\u00edble!"
+                "message": "\u00c1nimo, peque\u00f1o amigo. Incluso en los d\u00edas nublados, el sol siempre vuelve a brillar. Tu valor no depende de la compa\u00f1\u00eda de otros.",
+                "recommendation": "Te sugiero que hoy hagas algo que disfrutes mucho a solas, como leer un libro o escuchar tu m\u00fasica favorita. Reconoce tu propia fortaleza.",
+                "interesting_fact": "Sab\u00edas que los zorros rojos, como el de tu imagen, son animales incre\u00edblemente ingeniosos y a menudo disfrutan de la soledad en sus territorios. Ellos encuentran su propio camino con astucia."
             },
             "mood": "triste",
             "note": "Hoy tuve un d\u00eda triste, mis amigos en la escuela no fueron y me la pas\u00e9 s\u00f3lo todo el d\u00eda",
-            "img": ""
+            "img": "red fox"
         }
     }
 }

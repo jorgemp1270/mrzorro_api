@@ -113,7 +113,7 @@ preprocess = transforms.Compose([
 
 # Cargar etiquetas de clases de ImageNet
 with open(os.path.join(MODELS_DIR, "imagenet_class_index.json"), "r") as f:
-    idx_to_label = {int(key): value[1] for key, value in json.load(f).items()}
+    idx_to_label = {int(key): value for key, value in json.load(f).items()}
 
 # ============================================================================
 # FUNCIONES DE PROCESAMIENTO DE IMÁGENES
