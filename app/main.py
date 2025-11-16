@@ -267,6 +267,7 @@ async def predict_image(input: ImageInput):
     try:
         # Buscar entrada existente para la fecha
         data = db.search(Query().date == input.date)[0]
+        data = json.loads(json.dumps(data))  # Convertir TinyDB Result a dict estándar
         if not data:
             raise HTTPException(status_code=404, detail="No se encontró entrada para la fecha especificada")
 
@@ -284,7 +285,7 @@ async def predict_image(input: ImageInput):
         Tu respuesta debe ser en español y no debe exceder 100 palabras."""
 
         # Llenar el prompt con los datos del usuario
-        filled_prompt = prompt.format(mood=data.mood, note=data.note or "None", img=label or "None")
+        filled_prompt = prompt.format(mood=data['mood'], note=data['note'] or "None", img=label or "None")
 
         # Generar respuesta personalizada con IA
         overview = prompt_gemini(filled_prompt, GeminiResponseModel)
@@ -293,8 +294,8 @@ async def predict_image(input: ImageInput):
         updated_data = {
             "date": input.date,
             "overview": overview.model_dump(),
-            "mood": data.mood,
-            "note": data.note,
+            "mood": data['mood'],
+            "note": data['note'],
             "img": label
         }
 
