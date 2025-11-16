@@ -45,11 +45,15 @@ fastapi dev app/main.py
 ```
 backend/
 ├── app/
-│   └── main.py          # Aplicación principal FastAPI
+│   ├── main.py          # Aplicación principal FastAPI
+│   └── schemas.py       # Modelos Pydantic para validación
 ├── db/
 │   └── db.json          # Base de datos TinyDB
 ├── models/
 │   └── resnet50/        # Modelo ResNet-50 y archivos relacionados
+│       ├── resnet50-0676ba61.pth
+│       └── imagenet_class_index.json
+├── .env                 # Variables de entorno (no versionado)
 ├── requirements.txt     # Dependencias Python
 └── README.md           # Este archivo
 ```
@@ -167,26 +171,59 @@ backend/
 }
 ```
 
+### 6. Generar respuesta con prompt personalizado
+- **URL**: `/prompt`
+- **Método**: `POST`
+- **Descripción**: Genera una respuesta personalizada usando IA basada en las entradas del diario de la semana actual
+- **Cuerpo de la petición**:
+```json
+{
+    "prompt": "¿Cómo estuvo mi semana?"
+}
+```
+- **Campos**:
+  - `prompt` (string, requerido): Pregunta o prompt del usuario
+- **Funcionalidad**:
+  - Analiza las entradas del diario de la semana actual (desde el lunes)
+  - Envía solo los campos `mood`, `note` e `img` a la IA
+  - Genera una respuesta motivadora y personalizada
+- **Respuesta exitosa**:
+```json
+{
+    "response": "Respuesta motivadora basada en tu semana..."
+}
+```
+- **Respuesta error (400)**:
+```json
+{
+    "detail": "Error en generación de respuesta"
+}
+```
+
 ## 🤖 Integración con IA
 
-### Google Gemini AI
+### Google Gemini AI (gemini-2.5-flash)
 La API utiliza Google Gemini AI para generar:
-- Mensajes motivadores personalizados
-- Recomendaciones basadas en el estado de ánimo
-- Datos curiosos relacionados con el día del usuario
+- **Mensajes motivadores personalizados** basados en el estado de ánimo
+- **Recomendaciones diarias** adaptadas al contexto del usuario
+- **Datos curiosos** relacionados con las actividades del día
+- **Respuestas a prompts personalizados** analizando las entradas de la semana
 
 ### ResNet-50 para Clasificación de Imágenes
-- Modelo pre-entrenado en ImageNet
-- Clasifica imágenes en 1000 categorías diferentes
-- Procesa imágenes automáticamente cuando se suben al diario
+- Modelo pre-entrenado en ImageNet con 1000 clases
+- Clasifica imágenes automáticamente cuando se suben al diario
+- Las etiquetas predichas se integran en las recomendaciones de IA
+- Procesa imágenes en formato base64
 
 ## 📊 Base de Datos
 
 La aplicación utiliza TinyDB, una base de datos JSON ligera que almacena:
-- Entradas diarias del usuario
-- Estados de ánimo y notas
-- Etiquetas de imágenes procesadas
-- Respuestas generadas por IA
+- **Entradas diarias** con fecha como identificador único
+- **Estados de ánimo y notas** del usuario
+- **Etiquetas de imágenes** procesadas por ResNet-50
+- **Respuestas generadas por IA** (overview con mensaje, recomendación y dato curioso)
+- Los datos se almacenan en `db/db.json`
+- Se actualizan automáticamente si ya existe una entrada para la fecha actual
 
 ## 🔐 Configuración de Seguridad
 
@@ -212,3 +249,21 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 - Las fechas deben estar en formato ISO (YYYY-MM-DD)
 - Las respuestas de IA están limitadas a 100 palabras
 - La base de datos se crea automáticamente en la primera ejecución
+- El endpoint `/prompt` solo analiza entradas de la semana actual (desde el lunes)
+- Se utiliza configuración absoluta de rutas para archivos `.env` y modelos
+- Los modelos Pydantic están organizados en `app/schemas.py` para mejor mantenibilidad
+
+## 🧪 Desarrollo
+
+### Ejecutar en modo desarrollo
+```bash
+fastapi dev app/main.py
+```
+
+### Estructura de Esquemas
+Los modelos de datos están definidos en `app/schemas.py`:
+- `DiaryEntry`: Entrada de diario del usuario
+- `GeminiResponseModel`: Respuesta estructurada con mensaje, recomendación y dato curioso
+- `GeminiBaseResponse`: Respuesta simple para prompts personalizados
+- `ImageInput`: Entrada para predicción de imágenes
+- `PromptInput`: Entrada para prompts personalizados
