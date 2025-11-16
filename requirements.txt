@@ -1,7 +1,22 @@
-torch
-torchvision
-fastapi[standard]
-pydantic
-uvicorn[standard]
-google-genai
-tinydb
+# Dependencias principales
+fastapi[standard]==0.115.4
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+
+# Procesamiento de imágenes y Machine Learning
+torch==2.5.1
+torchvision==0.20.1
+Pillow==10.4.0
+
+# Base de datos
+tinydb==4.8.0
+
+# IA Generativa
+google-genai==0.8.3
+
+# Configuración y utilidades
+python-dotenv==1.0.1
+
+# Dependencias adicionales para desarrollo (opcional)
+# pytest==8.3.3
+# httpx==0.27.2
