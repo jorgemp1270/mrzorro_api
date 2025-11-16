@@ -31,8 +31,11 @@ from dotenv import load_dotenv
 # CONFIGURACIÓN Y CONSTANTES
 # ============================================================================
 
+# Obtener el directorio base del proyecto (directorio padre de 'app')
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Cargar variables de entorno desde archivo .env
-load_dotenv(".env")
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Inicializar cliente de GenAI
