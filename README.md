@@ -1,13 +1,15 @@
 # API Mr. Zorro
 
-Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro. Esta API funciona como un acompañante emocional que procesa entradas de diario, analiza imágenes usando IA y genera recomendaciones personalizadas.
+Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro. Esta API funciona como un acompañante emocional que procesa entradas de diario, analiza imágenes usando IA y genera recomendaciones personalizadas con sistema de autenticación y streak de usuarios.
 
 ## 🚀 Características
 
+- **Sistema de Usuarios**: Registro, login y gestión de streak diario
 - **Procesamiento de imágenes**: Clasificación automática usando ResNet-50 pre-entrenado
 - **IA Generativa**: Integración con Google Gemini AI para recomendaciones personalizadas
-- **Base de datos**: Almacenamiento de entradas de diario con TinyDB
-- **API RESTful**: Endpoints completos para gestión de diario
+- **Base de datos multi-usuario**: Almacenamiento separado por usuario con TinyDB
+- **API RESTful**: Endpoints completos para gestión de diario con autenticación
+- **Sistema de Streak**: Seguimiento de días consecutivos de login
 
 ## 📋 Requisitos
 
@@ -48,7 +50,8 @@ backend/
 │   ├── main.py          # Aplicación principal FastAPI
 │   └── schemas.py       # Modelos Pydantic para validación
 ├── db/
-│   └── db.json          # Base de datos TinyDB
+│   ├── db.json          # Base de datos de entradas de diario
+│   └── users.json       # Base de datos de usuarios
 ├── models/
 │   └── resnet50/        # Modelo ResNet-50 y archivos relacionados
 │       ├── resnet50-0676ba61.pth
@@ -60,7 +63,59 @@ backend/
 
 ## 🔧 Endpoints de la API
 
-### 1. Información de la API
+### 🔐 Autenticación de Usuarios
+
+### 1. Registrar nuevo usuario
+- **URL**: `/signup`
+- **Método**: `POST`
+- **Descripción**: Registra un nuevo usuario en el sistema
+- **Cuerpo de la petición**:
+```json
+{
+    "email": "usuario@email.com",
+    "password": "contraseña123",
+    "nickname": "MiApodo"
+}
+```
+- **Respuesta exitosa**:
+```json
+{
+    "message": "Usuario creado exitosamente",
+    "user": "user_20251117203959_8322"
+}
+```
+
+### 2. Iniciar sesión
+- **URL**: `/login`
+- **Método**: `POST`
+- **Descripción**: Inicia sesión y actualiza el streak del usuario
+- **Cuerpo de la petición**:
+```json
+{
+    "email": "usuario@email.com",
+    "password": "contraseña123"
+}
+```
+- **Respuesta exitosa**:
+```json
+{
+    "message": "Inicio de sesión exitoso",
+    "user": {
+        "email": "usuario@email.com",
+        "streak": 5,
+        "best_streak": 10,
+        "last_login": "2025-11-17T20:30:00"
+    }
+}
+```
+- **Lógica de Streak**:
+  - Incrementa streak si el login es en día diferente y < 24h del último login
+  - Resetea streak a 1 si han pasado > 24h
+  - Actualiza best_streak si streak actual > mejor streak histórico
+
+### 📚 Gestión de Diario
+
+### 3. Información de la API
 - **URL**: `/`
 - **Método**: `GET`
 - **Descripción**: Retorna información básica de la aplicación
@@ -73,14 +128,17 @@ backend/
 }
 ```
 
-### 2. Obtener todas las entradas del diario
-- **URL**: `/diary`
+### 4. Obtener entradas del diario por usuario
+- **URL**: `/diary/{user}`
 - **Método**: `GET`
-- **Descripción**: Obtiene todas las entradas del diario almacenadas
-- **Respuesta**: Array de entradas del diario
+- **Descripción**: Obtiene todas las entradas del diario para un usuario específico
+- **Parámetros**:
+  - `user` (string): ID único del usuario
+- **Respuesta**: Array de entradas del diario del usuario
 ```json
 [
     {
+        "user": "user_20251117203959_8322",
         "date": "2025-11-15",
         "overview": {
             "message": "Mensaje motivador",
@@ -88,17 +146,19 @@ backend/
             "interesting_fact": "Dato curioso del día"
         },
         "mood": "feliz",
+        "title": "Mi día especial",
         "note": "Nota del usuario",
         "img": "etiqueta_imagen"
     }
 ]
 ```
 
-### 3. Obtener entrada por fecha
-- **URL**: `/diary/{date}`
+### 5. Obtener entrada por usuario y fecha
+- **URL**: `/diary/{user}/{date}`
 - **Método**: `GET`
-- **Descripción**: Obtiene las entradas del diario para una fecha específica
+- **Descripción**: Obtiene las entradas del diario para un usuario y fecha específica
 - **Parámetros**:
+  - `user` (string): ID único del usuario
   - `date` (string): Fecha en formato YYYY-MM-DD
 - **Respuesta exitosa**: Array de entradas para la fecha especificada
 - **Respuesta error (404)**:
@@ -107,21 +167,31 @@ backend/
     "error": "No se encontraron datos para la fecha especificada"
 }
 ```
+- **Respuesta error (404) si usuario no existe**:
+```json
+{
+    "detail": "Usuario no encontrado"
+}
+```
 
-### 4. Agregar nueva entrada al diario
+### 6. Agregar nueva entrada al diario
 - **URL**: `/diary`
 - **Método**: `POST`
 - **Descripción**: Agrega una nueva entrada al diario con procesamiento de IA
 - **Cuerpo de la petición**:
 ```json
 {
+    "user": "user_20251117203959_8322",
     "mood": "feliz",
+    "title": "Mi día especial",
     "note": "Mi nota del día (opcional)",
     "img": "imagen_en_base64 (opcional)"
 }
 ```
 - **Campos**:
+  - `user` (string, requerido): ID único del usuario
   - `mood` (string, requerido): Estado de ánimo del usuario
+  - `title` (string, opcional): Título del día
   - `note` (string, opcional): Nota personal del usuario
   - `img` (string, opcional): Imagen codificada en base64
 - **Respuesta exitosa**:
@@ -137,18 +207,20 @@ backend/
 }
 ```
 
-### 5. Predecir etiqueta de imagen
+### 7. Predecir etiqueta de imagen
 - **URL**: `/predict-image`
 - **Método**: `POST`
 - **Descripción**: Analiza una imagen y actualiza la entrada del diario correspondiente
 - **Cuerpo de la petición**:
 ```json
 {
+    "user": "user_20251117203959_8322",
     "date": "2025-11-15",
     "img": "imagen_en_base64"
 }
 ```
 - **Campos**:
+  - `user` (string, requerido): ID único del usuario
   - `date` (string, requerido): Fecha en formato YYYY-MM-DD
   - `img` (string, requerido): Imagen codificada en base64
 - **Respuesta exitosa**:
@@ -171,20 +243,22 @@ backend/
 }
 ```
 
-### 6. Generar respuesta con prompt personalizado
+### 8. Generar respuesta con prompt personalizado
 - **URL**: `/prompt`
 - **Método**: `POST`
-- **Descripción**: Genera una respuesta personalizada usando IA basada en las entradas del diario de la semana actual
+- **Descripción**: Genera una respuesta personalizada usando IA basada en las entradas del diario de la semana actual del usuario
 - **Cuerpo de la petición**:
 ```json
 {
+    "user": "user_20251117203959_8322",
     "prompt": "¿Cómo estuvo mi semana?"
 }
 ```
 - **Campos**:
+  - `user` (string, requerido): ID único del usuario
   - `prompt` (string, requerido): Pregunta o prompt del usuario
 - **Funcionalidad**:
-  - Analiza las entradas del diario de la semana actual (desde el lunes)
+  - Analiza las entradas del diario de la semana actual (desde el lunes) del usuario específico
   - Envía solo los campos `mood`, `note` e `img` a la IA
   - Genera una respuesta motivadora y personalizada
 - **Respuesta exitosa**:
@@ -217,13 +291,34 @@ La API utiliza Google Gemini AI para generar:
 
 ## 📊 Base de Datos
 
-La aplicación utiliza TinyDB, una base de datos JSON ligera que almacena:
-- **Entradas diarias** con fecha como identificador único
-- **Estados de ánimo y notas** del usuario
+La aplicación utiliza TinyDB, una base de datos JSON ligera con dos archivos principales:
+
+### **users.json**
+- **Usuarios registrados** con credenciales y datos de streak
+- **Campos**: `user` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`
+- **Sistema de Streak**: Seguimiento automático de días consecutivos de login
+
+### **db.json**
+- **Entradas diarias** filtradas por usuario con fecha como identificador
+- **Estados de ánimo, notas y títulos** del usuario
 - **Etiquetas de imágenes** procesadas por ResNet-50
 - **Respuestas generadas por IA** (overview con mensaje, recomendación y dato curioso)
-- Los datos se almacenan en `db/db.json`
-- Se actualizan automáticamente si ya existe una entrada para la fecha actual
+- Los datos se almacenan por usuario y se actualizan automáticamente si ya existe una entrada para la fecha actual
+
+## 🔐 Sistema de Autenticación
+
+### **Validación de Usuario**
+- Todos los endpoints que requieren `user` validan que el usuario existe en `users.json`
+- Retorna error `404 - Usuario no encontrado` si el ID no existe
+
+### **Registro de Usuarios**
+- Genera ID único con timestamp: `user_YYYYMMDDHHMMSS_XXXX`
+- Valida emails únicos y almacena credenciales
+
+### **Sistema de Streak**
+- **Incremento**: Solo en días diferentes y < 24h del último login
+- **Reset**: A 1 si han pasado > 24h del último login
+- **Mejor Streak**: Se actualiza automáticamente cuando se supera el récord
 
 ## 🔐 Configuración de Seguridad
 
@@ -248,8 +343,9 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 - La API procesa imágenes en formato base64
 - Las fechas deben estar en formato ISO (YYYY-MM-DD)
 - Las respuestas de IA están limitadas a 100 palabras
-- La base de datos se crea automáticamente en la primera ejecución
-- El endpoint `/prompt` solo analiza entradas de la semana actual (desde el lunes)
+- Las bases de datos se crean automáticamente en la primera ejecución
+- Todos los endpoints con `user` validan la existencia del usuario
+- El endpoint `/prompt` solo analiza entradas de la semana actual del usuario específico
 - Se utiliza configuración absoluta de rutas para archivos `.env` y modelos
 - Los modelos Pydantic están organizados en `app/schemas.py` para mejor mantenibilidad
 
@@ -262,8 +358,16 @@ fastapi dev app/main.py
 
 ### Estructura de Esquemas
 Los modelos de datos están definidos en `app/schemas.py`:
-- `DiaryEntry`: Entrada de diario del usuario
+- `DiaryEntry`: Entrada de diario del usuario (incluye campo `user`)
 - `GeminiResponseModel`: Respuesta estructurada con mensaje, recomendación y dato curioso
 - `GeminiBaseResponse`: Respuesta simple para prompts personalizados
-- `ImageInput`: Entrada para predicción de imágenes
-- `PromptInput`: Entrada para prompts personalizados
+- `ImageInput`: Entrada para predicción de imágenes (incluye campo `user`)
+- `PromptInput`: Entrada para prompts personalizados (incluye campo `user`)
+- `LoginInput`: Credenciales de inicio de sesión
+- `SignupInput`: Datos de registro de nuevo usuario
+
+### Flujo de Autenticación
+1. **Registro**: `/signup` → genera ID único y almacena usuario
+2. **Login**: `/login` → valida credenciales y actualiza streak
+3. **Operaciones**: Todos los endpoints validan que el `user` existe
+4. **Datos**: Cada usuario solo accede a sus propios datos de diario

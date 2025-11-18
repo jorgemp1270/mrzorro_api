@@ -7,7 +7,9 @@ from pydantic import BaseModel, Field
 
 class DiaryEntry(BaseModel):
     """Modelo para entrada de diario del usuario"""
+    user: str  # ID único del usuario
     mood: str  # Estado de ánimo del usuario
+    title: str | None  # Título del día
     note: str | None  # Nota opcional del usuario
     img: str | None  # Imagen en base64 (opcional)
 
@@ -26,10 +28,23 @@ class GeminiBaseResponse(BaseModel):
 
 class ImageInput(BaseModel):
     """Modelo para entrada de predicción de imagen"""
+    user: str  # ID único del usuario
     date: str  # Fecha en formato YYYY-MM-DD
     img: str   # Imagen codificada en base64
 
 
 class PromptInput(BaseModel):
     """Modelo para entrada de prompt"""
+    user: str  # ID único del usuario
     prompt: str  # Texto del prompt a enviar
+
+class LoginInput(BaseModel):
+    """Modelo para entrada de login"""
+    email: str  # Nombre de usuario
+    password: str  # Contraseña
+
+class SignupInput(BaseModel):
+    """Modelo para entrada de signup"""
+    email: str  # Nombre de usuario
+    password: str  # Contraseña
+    nickname: str  # Apodo del usuario

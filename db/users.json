@@ -1,0 +1,13 @@
+{
+    "_default": {
+        "1": {
+            "user": "user_20251117203959_8322",
+            "email": "abc",
+            "password": "1234",
+            "nickname": "Usuario1",
+            "last_login": null,
+            "streak": 1,
+            "best_streak": 1
+        }
+    }
+}

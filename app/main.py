@@ -24,7 +24,9 @@ from schemas import (
     GeminiResponseModel,
     GeminiBaseResponse,
     ImageInput,
-    PromptInput
+    LoginInput,
+    PromptInput,
+    SignupInput
 )
 
 # Librerías de terceros - Procesamiento de imágenes y ML
@@ -81,6 +83,20 @@ def prompt_gemini(prompt: str, model: BaseModel) -> str:
     model_response = model.model_validate_json(response.text)
     # logger.info(f"Respuesta de Gemini: {response.text}")
     return model_response
+
+def validate_user_exists(user_id: str) -> bool:
+    """
+    Valida si un usuario existe en la base de datos.
+
+    Args:
+        user_id (str): ID del usuario a validar
+
+    Returns:
+        bool: True si el usuario existe, False en caso contrario
+    """
+    User = Query()
+    result = users_db.search(User.user == user_id)
+    return len(result) > 0
 
 # ============================================================================
 # CONFIGURACIÓN DEL MODELO DE CLASIFICACIÓN DE IMÁGENES
@@ -143,6 +159,7 @@ app = FastAPI(media_type="application/json; charset=utf-8")
 
 # Inicializar base de datos TinyDB (los datos se almacenan en 'db.json')
 db = TinyDB(os.path.join(BASE_DIR, 'db', 'db.json'), encoding='utf-8')
+users_db = TinyDB(os.path.join(BASE_DIR, 'db', 'users.json'), encoding='utf-8')
 
 # ============================================================================
 # ENDPOINTS DE LA API
@@ -160,29 +177,43 @@ async def read_root():
             "version": "1.0.0",
             "description": "API para la app Mr.Zorro"}
 
-@app.get("/diary")
-async def get_diary_data():
+@app.get("/diary/{user}")
+async def get_diary_data(user: str):
     """
-    Obtiene todas las entradas del diario almacenadas en la base de datos.
-
-    Returns:
-        JSONResponse: Lista completa de entradas del diario
-    """
-    return JSONResponse(content=db.all())
-
-@app.get("/diary/{date}")
-async def get_diary_by_date(date: str):
-    """
-    Obtiene las entradas del diario para una fecha específica.
+    Obtiene todas las entradas del diario para un usuario específico.
 
     Args:
+        user (str): ID único del usuario
+
+    Returns:
+        JSONResponse: Lista de entradas del diario del usuario
+    """
+    # Validar que el usuario existe
+    if not validate_user_exists(user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    Entry = Query()
+    result = db.search(Entry.user == user)
+    return JSONResponse(content=result)
+
+@app.get("/diary/{user}/{date}")
+async def get_diary_by_date(user: str, date: str):
+    """
+    Obtiene las entradas del diario para un usuario y fecha específica.
+
+    Args:
+        user (str): ID único del usuario
         date (str): La fecha en formato 'YYYY-MM-DD'
 
     Returns:
         JSONResponse: Entradas del diario para la fecha especificada o error 404
     """
+    # Validar que el usuario existe
+    if not validate_user_exists(user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
     Entry = Query()
-    result = db.search(Entry.date == date)
+    result = db.search((Entry.user == user) & (Entry.date == date))
     if result:
         return JSONResponse(content=result)
     return JSONResponse(content={"error": "No se encontraron datos para la fecha especificada"}, status_code=404)
@@ -201,6 +232,10 @@ async def add_diary_entry(entry: DiaryEntry):
     Returns:
         JSONResponse: Confirmación de que la entrada fue agregada exitosamente
     """
+
+    # Validar que el usuario existe
+    if not validate_user_exists(entry.user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     # Procesar imagen si está presente
     if entry.img is not None and entry.img != "":
@@ -226,15 +261,17 @@ async def add_diary_entry(entry: DiaryEntry):
 
     # Crear estructura de datos para almacenar
     entry_data = {
+        "user": entry.user,
         "date": date,
         "overview": overview.model_dump(),
         "mood": entry.mood,
         "note": entry.note,
         "img": entry.img
     }
-    # Verificar si ya existe una entrada para la fecha actual, actualizar si es así
-    if db.search(Query().date == date):
-        db.update(entry_data, Query().date == date)
+    # Verificar si ya existe una entrada para la fecha actual y usuario, actualizar si es así
+    Entry = Query()
+    if db.search((Entry.user == entry.user) & (Entry.date == date)):
+        db.update(entry_data, (Entry.user == entry.user) & (Entry.date == date))
         return JSONResponse(content={"message": "Entrada actualizada exitosamente"})
 
     # Insertar en base de datos
@@ -255,12 +292,19 @@ async def predict_image(input: ImageInput):
     Raises:
         HTTPException: Error 400 si la imagen/fecha es inválida o hay error en predicción
     """
+    # Validar que el usuario existe
+    if not validate_user_exists(input.user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
     try:
-        # Buscar entrada existente para la fecha
-        data = db.search(Query().date == input.date)[0]
-        data = json.loads(json.dumps(data))  # Convertir TinyDB Result a dict estándar
-        if not data:
+        # Buscar entrada existente para el usuario y fecha
+        Entry = Query()
+        result = db.search((Entry.user == input.user) & (Entry.date == input.date))
+        if not result:
             raise HTTPException(status_code=404, detail="No se encontró entrada para la fecha especificada")
+
+        data = result[0]
+        data = json.loads(json.dumps(data))  # Convertir TinyDB Result a dict estándar
 
         # Predecir etiqueta de la imagen
         label = predict_image_label(input.img)
@@ -283,6 +327,7 @@ async def predict_image(input: ImageInput):
 
         # Crear estructura de datos para almacenar
         updated_data = {
+            "user": input.user,
             "date": input.date,
             "overview": overview.model_dump(),
             "mood": data['mood'],
@@ -290,7 +335,7 @@ async def predict_image(input: ImageInput):
             "img": label
         }
 
-        db.update(updated_data, Query().date == input.date)
+        db.update(updated_data, (Entry.user == input.user) & (Entry.date == input.date))
         return JSONResponse(content={"date": input.date, "predicted_label": label})
     except Exception as e:
         logger.error(f"Error de predicción: {e}")
@@ -310,19 +355,25 @@ async def generate_prompt_response(prompt: PromptInput):
     Raises:
         HTTPException: Error 400 si hay un error en la generación de la respuesta
     """
+    # Validar que el usuario existe
+    if not validate_user_exists(prompt.user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
     try:
         # Obtener fecha de inicio de la semana (lunes)
         today = datetime.date.today()
         start_of_week = today - datetime.timedelta(days=today.weekday())
 
-        # Filtrar entradas de la semana actual y extraer solo mood, note e img
+        # Filtrar entradas de la semana actual para el usuario específico y extraer solo mood, note e img
+        Entry = Query()
+        user_entries = db.search(Entry.user == prompt.user)
         diary_entries = [
             {
                 "mood": entry.get("mood"),
                 "note": entry.get("note"),
                 "img": entry.get("img")
             }
-            for entry in db.all()
+            for entry in user_entries
             if entry.get("date") and datetime.date.fromisoformat(entry.get("date")) >= start_of_week
         ]
 
@@ -336,12 +387,117 @@ async def generate_prompt_response(prompt: PromptInput):
         Tu respuesta debe ser en español y no debe exceder 100 palabras.
         Usuario: {user_prompt}
         Entradas del diario: {diary_entries}
-        """.format(user_prompt=prompt, diary_entries=json.dumps(diary_entries, ensure_ascii=False))
+        """.format(user_prompt=prompt.prompt, diary_entries=json.dumps(diary_entries, ensure_ascii=False))
         response = prompt_gemini(structured_prompt, GeminiBaseResponse)
         return JSONResponse(content=response.model_dump())
     except Exception as e:
         logger.error(f"Error de predicción: {e}")
         raise HTTPException(status_code=400, detail="Error en generación de respuesta")
+
+@app.post("/signup")
+async def signup_user(SignupInput: SignupInput):
+    """
+    Registra un nuevo usuario en la base de datos.
+
+    Args:
+        SignupInput: Datos del nuevo usuario (email, password, nickname)
+
+    Returns:
+        JSONResponse: Confirmación de registro exitoso o error si el usuario ya existe
+    """
+    try:
+        User = Query()
+        # Verificar si el usuario ya existe
+        if users_db.search(User.email == SignupInput.email):
+            raise HTTPException(status_code=400, detail="El usuario ya existe")
+
+        # Crear nuevo usuario
+        new_user = {
+            "user": f"user_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{hash(SignupInput.email) % 10000}",
+            "email": SignupInput.email,
+            "password": SignupInput.password,
+            "nickname": SignupInput.nickname,
+            "last_login": None,
+            "streak": 1,
+            "best_streak": 1
+        }
+        users_db.insert(new_user)
+        return JSONResponse(content={"message": "Usuario registrado exitosamente"})
+    except Exception as e:
+        logger.error(f"Error de registro: {e}")
+        raise HTTPException(status_code=400, detail="El usuario ya existe")
+
+@app.post("/login")
+async def login_user(LoginInput: LoginInput):
+    """
+    Verifica las credenciales del usuario para iniciar sesión y actualiza el streak.
+    Args:
+        LoginInput: Credenciales del usuario (email y password)
+    """
+    try:
+        User = Query()
+        result = users_db.search((User.email == LoginInput.email) & (User.password == LoginInput.password))
+        if result:
+            user_data = result[0]
+            current_time = datetime.datetime.now()
+
+            # Obtener la última fecha de login (si existe)
+            last_login = user_data.get("last_login")
+            current_streak = user_data.get("streak", 0)
+            best_streak = user_data.get("best_streak", 0)
+
+            # Calcular nuevo streak
+            if last_login:
+                last_login_datetime = datetime.datetime.fromisoformat(last_login)
+                time_diff = current_time - last_login_datetime
+
+                # Verificar si es un día diferente
+                last_login_date = last_login_datetime.date()
+                current_date = current_time.date()
+                is_different_day = last_login_date != current_date
+
+                # Incrementar streak solo si es día diferente Y menos de 24 horas
+                if is_different_day and time_diff < datetime.timedelta(hours=24):
+                    current_streak += 1
+                elif time_diff >= datetime.timedelta(hours=24):
+                    # Si pasaron más de 24 horas, resetear streak
+                    current_streak = 1
+                # Si es el mismo día, mantener el streak actual (no incrementar)
+            else:
+                # Primera vez que se loguea, streak = 1
+                current_streak = 1
+
+            # Actualizar best_streak si es necesario
+            if current_streak > best_streak:
+                best_streak = current_streak
+
+            # Actualizar datos del usuario
+            updated_user_data = {
+                **user_data,
+                "last_login": current_time.isoformat(),
+                "streak": current_streak,
+                "best_streak": best_streak
+            }
+
+            users_db.update(updated_user_data, (User.email == LoginInput.email))
+
+            # Convertir TinyDB Result a dict estándar
+            result = json.loads(json.dumps(updated_user_data))
+            result = {
+                "user": result["user"],
+                "streak": result["streak"],
+                "best_streak": result["best_streak"],
+                "last_login": result["last_login"]
+            }
+            return JSONResponse(content={
+                "message": "Inicio de sesión exitoso",
+                "user": result
+            })
+        else:
+            raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    except Exception as e:
+        logger.error(f"Error de inicio de sesión: {e}")
+        raise HTTPException(status_code=400, detail="Error en el proceso de inicio de sesión")
 # ============================================================================
 # PUNTO DE ENTRADA DE LA APLICACIÓN
 # ============================================================================

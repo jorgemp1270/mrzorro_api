@@ -1,20 +1,24 @@
 {
     "_default": {
         "1": {
+            "user": "",
             "date": "2024-10-01",
             "overview": "Recomendaci\u00f3n, motivaci\u00f3n, consejo del d\u00eda generado por Gemini",
             "mood": "Emoci\u00f3n del usuario del d\u00eda",
+            "title": "T\u00edtulo del d\u00eda",
             "note": "Nota del usuario del d\u00eda",
             "img": "Etiqueta de la im\u00e1gen predecida"
         },
         "2": {
+            "user": "user_20251117204115_7929",
             "date": "2025-11-15",
             "overview": {
-                "message": "\u00c1nimo, peque\u00f1o amigo. Incluso en los d\u00edas nublados, el sol siempre vuelve a brillar. Tu valor no depende de la compa\u00f1\u00eda de otros.",
-                "recommendation": "Te sugiero que hoy hagas algo que disfrutes mucho a solas, como leer un libro o escuchar tu m\u00fasica favorita. Reconoce tu propia fortaleza.",
-                "interesting_fact": "Sab\u00edas que los zorros rojos, como el de tu imagen, son animales incre\u00edblemente ingeniosos y a menudo disfrutan de la soledad en sus territorios. Ellos encuentran su propio camino con astucia."
+                "message": "\u00a1\u00c1nimo! Aunque hoy haya sido un d\u00eda triste, recuerda que tu val\u00eda no depende de la compa\u00f1\u00eda. Eres incre\u00edble tal como eres.",
+                "recommendation": "Ma\u00f1ana, \u00bfqu\u00e9 tal si intentas algo que te guste solo a ti? A veces, disfrutar de tu propia compa\u00f1\u00eda es un gran regalo. \u00a1Un nuevo d\u00eda te espera!",
+                "interesting_fact": "\u00bfSab\u00edas que los zorros rojos, como el de tu imagen, son animales muy astutos y adaptables? Incluso en la soledad, encuentran maneras de prosperar y ser felices."
             },
             "mood": "triste",
+            "title": "D\u00eda solitario",
             "note": "Hoy tuve un d\u00eda triste, mis amigos en la escuela no fueron y me la pas\u00e9 s\u00f3lo todo el d\u00eda",
             "img": "red fox"
         }
