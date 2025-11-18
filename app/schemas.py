@@ -16,6 +16,7 @@ class DiaryEntry(BaseModel):
 
 class GeminiResponseModel(BaseModel):
     """Modelo para respuesta estructurada de Gemini AI"""
+    user: str
     message: str = Field(description="Mensaje motivador general")
     recommendation: str = Field(description="Recomendación para el usuario")
     interesting_fact: str = Field(description="Dato curioso para el usuario relacionado con su día")
@@ -23,6 +24,7 @@ class GeminiResponseModel(BaseModel):
 
 class GeminiBaseResponse(BaseModel):
     """Modelo base para respuesta de Gemini AI"""
+    user: str
     response: str = Field(description="Mensaje motivador general")
 
 
