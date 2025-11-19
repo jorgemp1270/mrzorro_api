@@ -207,10 +207,10 @@ backend/
 }
 ```
 
-### 7. Predecir etiqueta de imagen
-- **URL**: `/predict-image`
+### 7. Actualizar imagen en entrada existente
+- **URL**: `/update-image`
 - **Método**: `POST`
-- **Descripción**: Analiza una imagen y actualiza la entrada del diario correspondiente
+- **Descripción**: Analiza una imagen y actualiza la entrada del diario correspondiente con nueva IA
 - **Cuerpo de la petición**:
 ```json
 {
@@ -243,7 +243,32 @@ backend/
 }
 ```
 
-### 8. Generar respuesta con prompt personalizado
+### 8. Predecir etiqueta de imagen independiente
+- **URL**: `/predict-image`
+- **Método**: `POST`
+- **Descripción**: Predice la etiqueta de una imagen sin actualizar ningún diario
+- **Cuerpo de la petición**:
+```json
+{
+    "user": "user_20251117203959_8322",
+    "img": "imagen_en_base64"
+}
+```
+- **Campos**:
+  - `user` (string, requerido): ID único del usuario
+  - `img` (string, requerido): Imagen codificada en base64
+- **Respuesta exitosa**:
+```json
+{
+    "predicted_label": "etiqueta_predicha",
+    "diary_context": {
+        "recent_entries": [...],
+        "ai_description": "Descripción generada por IA basada en entradas recientes"
+    }
+}
+```
+
+### 9. Generar respuesta con prompt personalizado
 - **URL**: `/prompt`
 - **Método**: `POST`
 - **Descripción**: Genera una respuesta personalizada usando IA basada en las entradas del diario de la semana actual del usuario
@@ -345,6 +370,9 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 - Las respuestas de IA están limitadas a 100 palabras
 - Las bases de datos se crean automáticamente en la primera ejecución
 - Todos los endpoints con `user` validan la existencia del usuario
+- **Diferencia entre endpoints de imágenes**:
+  - `/update-image`: Actualiza una entrada de diario existente con nueva imagen y regenera IA
+  - `/predict-image`: Solo predice etiqueta de imagen y proporciona contexto del diario
 - El endpoint `/prompt` solo analiza entradas de la semana actual del usuario específico
 - Se utiliza configuración absoluta de rutas para archivos `.env` y modelos
 - Los modelos Pydantic están organizados en `app/schemas.py` para mejor mantenibilidad
@@ -361,7 +389,8 @@ Los modelos de datos están definidos en `app/schemas.py`:
 - `DiaryEntry`: Entrada de diario del usuario (incluye campo `user`)
 - `GeminiResponseModel`: Respuesta estructurada con mensaje, recomendación y dato curioso
 - `GeminiBaseResponse`: Respuesta simple para prompts personalizados
-- `ImageInput`: Entrada para predicción de imágenes (incluye campo `user`)
+- `ImageInput`: Entrada para predicción y actualización de imágenes en diario (incluye `user`, `date`, `img`)
+- `ImagePrediction`: Entrada para predicción independiente de imágenes (incluye `user`, `img`)
 - `PromptInput`: Entrada para prompts personalizados (incluye campo `user`)
 - `LoginInput`: Credenciales de inicio de sesión
 - `SignupInput`: Datos de registro de nuevo usuario
