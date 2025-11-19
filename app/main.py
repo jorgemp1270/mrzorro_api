@@ -343,7 +343,7 @@ async def update_image_prediction(input: ImageInput):
         raise HTTPException(status_code=400, detail="Imagen/fecha inválida o error en predicción")
 
 @app.post("/predict-image")
-def predict_image_label_endpoint(input: ImagePrediction):
+def predict_image_endpoint(input: ImagePrediction):
     """
     Predice la etiqueta de una imagen codificada en base64.
 
@@ -361,14 +361,32 @@ def predict_image_label_endpoint(input: ImagePrediction):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     try:
         label = predict_image_label(input.img)
+        # Obtener fecha de inicio de la semana (lunes)
+        today = datetime.date.today()
+        start_of_week = today - datetime.timedelta(days=today.weekday())
+
+        # Filtrar entradas de la semana actual para el usuario específico y extraer solo mood, note e img
+        Entry = Query()
+        user_entries = db.search(Entry.user == input.user)
+        diary_entries = [
+            {
+                "mood": entry.get("mood"),
+                "note": entry.get("note"),
+                "img": entry.get("img")
+            }
+            for entry in user_entries
+            if entry.get("date") and datetime.date.fromisoformat(entry.get("date")) >= start_of_week
+        ]
         #Generar descripción con Gemini AI
         prompt = """
         Eres un acompañante emocional llamado Mr. Zorro.
         Estas ayudando a un usuario a describir la imagen que ha subido a su diario.
         Basándote en la etiqueta reconocida por ResNet-50: {img},
         crea una breve descripción positiva y motivadora relacionada con esa imagen.
+        Basate también en las entradas previas de la semana del usuario a su diario:
+        {diary_entries}
         Tu respuesta debe ser en español y no debe exceder 50 palabras.
-        """.format(img=label or "None")
+        """.format(img=label or "None", diary_entries=json.dumps(diary_entries, ensure_ascii=False))
 
         # Generar respuesta personalizada con IA
         response = prompt_gemini(prompt, GeminiResponseModel)
