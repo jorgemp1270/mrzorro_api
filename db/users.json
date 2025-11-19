@@ -1,13 +1,1 @@
-{
-    "_default": {
-        "1": {
-            "user": "user_20251117203959_8322",
-            "email": "abc",
-            "password": "1234",
-            "nickname": "Usuario1",
-            "last_login": null,
-            "streak": 1,
-            "best_streak": 1
-        }
-    }
-}
+{"_default": {"1": {"user": "user_20251117203959_8322", "email": "abc", "password": "1234", "nickname": "Usuario1", "last_login": null, "streak": 1, "best_streak": 1}, "2": {"user": "user_20251118195123_2360", "email": "test@test.com", "password": "12345678a", "nickname": "kris", "last_login": "2025-11-18T22:00:24.754100", "streak": 1, "best_streak": 1}}}

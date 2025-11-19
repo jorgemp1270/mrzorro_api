@@ -16,7 +16,6 @@ class DiaryEntry(BaseModel):
 
 class GeminiResponseModel(BaseModel):
     """Modelo para respuesta estructurada de Gemini AI"""
-    user: str
     message: str = Field(description="Mensaje motivador general")
     recommendation: str = Field(description="Recomendación para el usuario")
     interesting_fact: str = Field(description="Dato curioso para el usuario relacionado con su día")
@@ -24,7 +23,6 @@ class GeminiResponseModel(BaseModel):
 
 class GeminiBaseResponse(BaseModel):
     """Modelo base para respuesta de Gemini AI"""
-    user: str
     response: str = Field(description="Mensaje motivador general")
 
 
@@ -33,6 +31,11 @@ class ImageInput(BaseModel):
     user: str  # ID único del usuario
     date: str  # Fecha en formato YYYY-MM-DD
     img: str   # Imagen codificada en base64
+
+class ImagePrediction(BaseModel):
+    """Modelo para respuesta de predicción de imagen"""
+    user: str  # ID único del usuario
+    img: str  # Etiqueta predicha para la imagen
 
 
 class PromptInput(BaseModel):

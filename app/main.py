@@ -24,6 +24,7 @@ from schemas import (
     GeminiResponseModel,
     GeminiBaseResponse,
     ImageInput,
+    ImagePrediction,
     LoginInput,
     PromptInput,
     SignupInput
@@ -278,8 +279,8 @@ async def add_diary_entry(entry: DiaryEntry):
     db.insert(entry_data)
     return JSONResponse(content={"message": "Entrada agregada exitosamente"})
 
-@app.post("/predict-image")
-async def predict_image(input: ImageInput):
+@app.post("/update-image")
+async def update_image_prediction(input: ImageInput):
     """
     Predice la etiqueta de una imagen y actualiza la entrada del diario correspondiente.
 
@@ -340,6 +341,48 @@ async def predict_image(input: ImageInput):
     except Exception as e:
         logger.error(f"Error de predicción: {e}")
         raise HTTPException(status_code=400, detail="Imagen/fecha inválida o error en predicción")
+
+@app.post("/predict-image")
+def predict_image_label_endpoint(input: ImagePrediction):
+    """
+    Predice la etiqueta de una imagen codificada en base64.
+
+    Args:
+        input (ImageInput): Objeto con usuario, fecha e imagen en base64
+
+    Returns:
+        JSONResponse: Etiqueta predicha de la imagen
+
+    Raises:
+        HTTPException: Error 400 si hay un error en la predicción
+    """
+    # Validar que el usuario existe
+    if not validate_user_exists(input.user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    try:
+        label = predict_image_label(input.img)
+        #Generar descripción con Gemini AI
+        prompt = """
+        Eres un acompañante emocional llamado Mr. Zorro.
+        Estas ayudando a un usuario a describir la imagen que ha subido a su diario.
+        Basándote en la etiqueta reconocida por ResNet-50: {img},
+        crea una breve descripción positiva y motivadora relacionada con esa imagen.
+        Tu respuesta debe ser en español y no debe exceder 50 palabras.
+        """.format(img=label or "None")
+
+        # Generar respuesta personalizada con IA
+        response = prompt_gemini(prompt, GeminiResponseModel)
+
+        # Crear estructura de datos para almacenar
+        data = {
+            "overview": response.model_dump(),
+            "img": label
+        }
+
+        return JSONResponse(content=data)
+    except Exception as e:
+        logger.error(f"Error de predicción: {e}")
+        raise HTTPException(status_code=400, detail="Error en predicción de imagen")
 
 @app.post("/prompt")
 async def generate_prompt_response(prompt: PromptInput):
