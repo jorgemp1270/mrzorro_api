@@ -266,18 +266,29 @@ async def add_diary_entry(entry: DiaryEntry):
         "date": date,
         "overview": overview.model_dump(),
         "mood": entry.mood,
+        "title": entry.title,
         "note": entry.note,
         "img": entry.img
     }
     # Verificar si ya existe una entrada para la fecha actual y usuario, actualizar si es así
     Entry = Query()
+    User = Query()
     if db.search((Entry.user == entry.user) & (Entry.date == date)):
         db.update(entry_data, (Entry.user == entry.user) & (Entry.date == date))
         return JSONResponse(content={"message": "Entrada actualizada exitosamente"})
 
     # Insertar en base de datos
     db.insert(entry_data)
-    return JSONResponse(content={"message": "Entrada agregada exitosamente"})
+
+    # Otorgar 5 puntos al usuario por agregar una entrada
+    user_data = users_db.search(User.user == entry.user)[0]
+    current_points = user_data.get("points", 0)
+    new_points = current_points + 5
+    users_db.update({"points": new_points}, User.user == entry.user)
+
+    return JSONResponse(content={
+        "message": "Entrada agregada exitosamente",
+    })
 
 @app.post("/update-image")
 async def update_image_prediction(input: ImageInput):
@@ -505,6 +516,7 @@ async def login_user(LoginInput: LoginInput):
             # Obtener la última fecha de login (si existe)
             last_login = user_data.get("last_login")
             current_streak = user_data.get("streak", 0)
+            points = user_data.get("points", 0)
             best_streak = user_data.get("best_streak", 0)
 
             # Calcular nuevo streak
@@ -520,13 +532,16 @@ async def login_user(LoginInput: LoginInput):
                 # Incrementar streak solo si es día diferente Y menos de 24 horas
                 if is_different_day and time_diff < datetime.timedelta(hours=24):
                     current_streak += 1
+                    points += 1  # Otorgar 1 punto por login diario
                 elif time_diff >= datetime.timedelta(hours=24):
                     # Si pasaron más de 24 horas, resetear streak
                     current_streak = 1
+                    points += 1  # Otorgar 1 punto por login diario
                 # Si es el mismo día, mantener el streak actual (no incrementar)
             else:
                 # Primera vez que se loguea, streak = 1
                 current_streak = 1
+                points += 1  # Otorgar 1 punto por login diario
 
             # Actualizar best_streak si es necesario
             if current_streak > best_streak:
@@ -537,7 +552,8 @@ async def login_user(LoginInput: LoginInput):
                 **user_data,
                 "last_login": current_time.isoformat(),
                 "streak": current_streak,
-                "best_streak": best_streak
+                "best_streak": best_streak,
+                "points": points
             }
 
             users_db.update(updated_user_data, (User.email == LoginInput.email))
@@ -546,9 +562,10 @@ async def login_user(LoginInput: LoginInput):
             result = json.loads(json.dumps(updated_user_data))
             result = {
                 "user": result["user"],
+                "nickname": result["nickname"],
                 "streak": result["streak"],
                 "best_streak": result["best_streak"],
-                "last_login": result["last_login"]
+                "points": result["points"]
             }
             return JSONResponse(content={
                 "message": "Inicio de sesión exitoso",
