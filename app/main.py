@@ -17,9 +17,11 @@ from pydantic import BaseModel
 
 # Librerías de terceros - Base de datos
 from tinydb import TinyDB, Query
+from beanie import PydanticObjectId
+from bson import ObjectId
 
 # Esquemas de la aplicación
-from schemas import (
+from .schemas import (
     DiaryEntry,
     GeminiResponseModel,
     GeminiBaseResponse,
@@ -29,6 +31,10 @@ from schemas import (
     PromptInput,
     SignupInput
 )
+
+# MongoDB models and database
+from .database import init_database
+from .models import User, DiaryEntryDoc
 
 # Librerías de terceros - Procesamiento de imágenes y ML
 from PIL import Image
@@ -85,7 +91,7 @@ def prompt_gemini(prompt: str, model: BaseModel) -> str:
     # logger.info(f"Respuesta de Gemini: {response.text}")
     return model_response
 
-def validate_user_exists(user_id: str) -> bool:
+async def validate_user_exists(user_id: str) -> bool:
     """
     Valida si un usuario existe en la base de datos.
 
@@ -95,9 +101,8 @@ def validate_user_exists(user_id: str) -> bool:
     Returns:
         bool: True si el usuario existe, False en caso contrario
     """
-    User = Query()
-    result = users_db.search(User.user == user_id)
-    return len(result) > 0
+    user = await User.find_one(User.user_id == user_id)
+    return user is not None
 
 # ============================================================================
 # CONFIGURACIÓN DEL MODELO DE CLASIFICACIÓN DE IMÁGENES
@@ -158,9 +163,12 @@ def predict_image_label(image_base64: str) -> str:
 # Crear aplicación FastAPI
 app = FastAPI(media_type="application/json; charset=utf-8")
 
-# Inicializar base de datos TinyDB (los datos se almacenan en 'db.json')
-db = TinyDB(os.path.join(BASE_DIR, 'db', 'db.json'), encoding='utf-8')
-users_db = TinyDB(os.path.join(BASE_DIR, 'db', 'users.json'), encoding='utf-8')
+# MongoDB database initialization on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize MongoDB connection on application startup"""
+    await init_database()
+    logger.info("MongoDB connection initialized successfully")
 
 # ============================================================================
 # ENDPOINTS DE LA API
@@ -190,11 +198,12 @@ async def get_diary_data(user: str):
         JSONResponse: Lista de entradas del diario del usuario
     """
     # Validar que el usuario existe
-    if not validate_user_exists(user):
+    if not await validate_user_exists(user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    Entry = Query()
-    result = db.search(Entry.user == user)
+    entries = await DiaryEntryDoc.find(DiaryEntryDoc.user_id == user).to_list()
+    # Convert documents to dict format for JSON response
+    result = [entry.dict(exclude={"id", "created_at"}) for entry in entries]
     return JSONResponse(content=result)
 
 @app.get("/diary/{user}/{date}")
@@ -210,12 +219,12 @@ async def get_diary_by_date(user: str, date: str):
         JSONResponse: Entradas del diario para la fecha especificada o error 404
     """
     # Validar que el usuario existe
-    if not validate_user_exists(user):
+    if not await validate_user_exists(user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    Entry = Query()
-    result = db.search((Entry.user == user) & (Entry.date == date))
-    if result:
+    entries = await DiaryEntryDoc.find(DiaryEntryDoc.user_id == user, DiaryEntryDoc.date == date).to_list()
+    if entries:
+        result = [entry.dict(exclude={"id"}) for entry in entries]
         return JSONResponse(content=result)
     return JSONResponse(content={"error": "No se encontraron datos para la fecha especificada"}, status_code=404)
 
@@ -235,7 +244,7 @@ async def add_diary_entry(entry: DiaryEntry):
     """
 
     # Validar que el usuario existe
-    if not validate_user_exists(entry.user):
+    if not await validate_user_exists(entry.user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     # Procesar imagen si está presente
@@ -262,7 +271,7 @@ async def add_diary_entry(entry: DiaryEntry):
 
     # Crear estructura de datos para almacenar
     entry_data = {
-        "user": entry.user,
+        "user_id": entry.user,
         "date": date,
         "overview": overview.model_dump(),
         "mood": entry.mood,
@@ -270,24 +279,31 @@ async def add_diary_entry(entry: DiaryEntry):
         "note": entry.note,
         "img": entry.img
     }
+
     # Verificar si ya existe una entrada para la fecha actual y usuario, actualizar si es así
-    Entry = Query()
-    User = Query()
-    if db.search((Entry.user == entry.user) & (Entry.date == date)):
-        db.update(entry_data, (Entry.user == entry.user) & (Entry.date == date))
+    existing_entry = await DiaryEntryDoc.find_one(DiaryEntryDoc.user_id == entry.user, DiaryEntryDoc.date == date)
+    if existing_entry:
+        await existing_entry.update({"$set": entry_data})
         return JSONResponse(content={"message": "Entrada actualizada exitosamente"})
 
-    # Insertar en base de datos
-    db.insert(entry_data)
+    # Crear nueva entrada
+    new_entry = DiaryEntryDoc(**entry_data)
+    await new_entry.insert()
+    logger.info(f"✓ Created diary entry for user {entry.user} on {date}")
 
     # Otorgar 5 puntos al usuario por agregar una entrada
-    user_data = users_db.search(User.user == entry.user)[0]
-    current_points = user_data.get("points", 0)
-    new_points = current_points + 5
-    users_db.update({"points": new_points}, User.user == entry.user)
+    user = await User.find_one(User.user_id == entry.user)
+    new_points = 5  # Default if user not found
+    if user:
+        current_points = user.points
+        new_points = current_points + 5
+        await user.update({"$set": {"points": new_points}})
+        logger.info(f"✓ Updated user {entry.user} points: {current_points} → {new_points}")
 
     return JSONResponse(content={
         "message": "Entrada agregada exitosamente",
+        "points_earned": 5,
+        "total_points": new_points
     })
 
 @app.post("/update-image")
@@ -305,23 +321,18 @@ async def update_image_prediction(input: ImageInput):
         HTTPException: Error 400 si la imagen/fecha es inválida o hay error en predicción
     """
     # Validar que el usuario existe
-    if not validate_user_exists(input.user):
+    if not await validate_user_exists(input.user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     try:
         # Buscar entrada existente para el usuario y fecha
-        Entry = Query()
-        result = db.search((Entry.user == input.user) & (Entry.date == input.date))
-        if not result:
+        existing_entry = await DiaryEntryDoc.find_one(DiaryEntryDoc.user_id == input.user, DiaryEntryDoc.date == input.date)
+        if not existing_entry:
             raise HTTPException(status_code=404, detail="No se encontró entrada para la fecha especificada")
-
-        data = result[0]
-        data = json.loads(json.dumps(data))  # Convertir TinyDB Result a dict estándar
 
         # Predecir etiqueta de la imagen
         label = predict_image_label(input.img)
 
-        #Actualizar overview con nuevo contenido
         # Crear prompt para Gemini AI
         prompt = """
         Eres un acompañante emocional llamado Mr. Zorro
@@ -332,34 +343,31 @@ async def update_image_prediction(input: ImageInput):
         Tu respuesta debe ser en español y no debe exceder 100 palabras."""
 
         # Llenar el prompt con los datos del usuario
-        filled_prompt = prompt.format(mood=data['mood'], note=data['note'] or "None", img=label or "None")
+        filled_prompt = prompt.format(mood=existing_entry.mood, note=existing_entry.note or "None", img=label or "None")
 
         # Generar respuesta personalizada con IA
         overview = prompt_gemini(filled_prompt, GeminiResponseModel)
 
-        # Crear estructura de datos para almacenar
-        updated_data = {
-            "user": input.user,
-            "date": input.date,
-            "overview": overview.model_dump(),
-            "mood": data['mood'],
-            "note": data['note'],
-            "img": label
-        }
+        # Actualizar la entrada con nueva imagen y overview
+        await existing_entry.update({
+            "$set": {
+                "overview": overview.model_dump(),
+                "img": label
+            }
+        })
 
-        db.update(updated_data, (Entry.user == input.user) & (Entry.date == input.date))
         return JSONResponse(content={"date": input.date, "predicted_label": label})
     except Exception as e:
         logger.error(f"Error de predicción: {e}")
         raise HTTPException(status_code=400, detail="Imagen/fecha inválida o error en predicción")
 
 @app.post("/predict-image")
-def predict_image_endpoint(input: ImagePrediction):
+async def predict_image_endpoint(input: ImagePrediction):
     """
     Predice la etiqueta de una imagen codificada en base64.
 
     Args:
-        input (ImageInput): Objeto con usuario, fecha e imagen en base64
+        input (ImagePrediction): Objeto con usuario e imagen en base64
 
     Returns:
         JSONResponse: Etiqueta predicha de la imagen
@@ -368,7 +376,7 @@ def predict_image_endpoint(input: ImagePrediction):
         HTTPException: Error 400 si hay un error en la predicción
     """
     # Validar que el usuario existe
-    if not validate_user_exists(input.user):
+    if not await validate_user_exists(input.user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     try:
         label = predict_image_label(input.img)
@@ -376,19 +384,19 @@ def predict_image_endpoint(input: ImagePrediction):
         today = datetime.date.today()
         start_of_week = today - datetime.timedelta(days=today.weekday())
 
-        # Filtrar entradas de la semana actual para el usuario específico y extraer solo mood, note e img
-        Entry = Query()
-        user_entries = db.search(Entry.user == input.user)
+        # Filtrar entradas de la semana actual para el usuario específico
+        user_entries = await DiaryEntryDoc.find(DiaryEntryDoc.user_id == input.user).to_list()
         diary_entries = [
             {
-                "mood": entry.get("mood"),
-                "note": entry.get("note"),
-                "img": entry.get("img")
+                "mood": entry.mood,
+                "note": entry.note,
+                "img": entry.img
             }
             for entry in user_entries
-            if entry.get("date") and datetime.date.fromisoformat(entry.get("date")) >= start_of_week
+            if entry.date and datetime.date.fromisoformat(entry.date) >= start_of_week
         ]
-        #Generar descripción con Gemini AI
+
+        # Generar descripción con Gemini AI
         prompt = """
         Eres un acompañante emocional llamado Mr. Zorro.
         Estas ayudando a un usuario a describir la imagen que ha subido a su diario.
@@ -419,7 +427,7 @@ async def generate_prompt_response(prompt: PromptInput):
     Genera una respuesta estructurada usando Gemini AI basada en el prompt proporcionado.
 
     Args:
-        prompt (str): El texto del prompt a enviar
+        prompt (PromptInput): El texto del prompt a enviar
 
     Returns:
         JSONResponse: Respuesta generada por Gemini AI
@@ -428,7 +436,7 @@ async def generate_prompt_response(prompt: PromptInput):
         HTTPException: Error 400 si hay un error en la generación de la respuesta
     """
     # Validar que el usuario existe
-    if not validate_user_exists(prompt.user):
+    if not await validate_user_exists(prompt.user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     try:
@@ -436,17 +444,16 @@ async def generate_prompt_response(prompt: PromptInput):
         today = datetime.date.today()
         start_of_week = today - datetime.timedelta(days=today.weekday())
 
-        # Filtrar entradas de la semana actual para el usuario específico y extraer solo mood, note e img
-        Entry = Query()
-        user_entries = db.search(Entry.user == prompt.user)
+        # Filtrar entradas de la semana actual para el usuario específico
+        user_entries = await DiaryEntryDoc.find(DiaryEntryDoc.user_id == prompt.user).to_list()
         diary_entries = [
             {
-                "mood": entry.get("mood"),
-                "note": entry.get("note"),
-                "img": entry.get("img")
+                "mood": entry.mood,
+                "note": entry.note,
+                "img": entry.img
             }
             for entry in user_entries
-            if entry.get("date") and datetime.date.fromisoformat(entry.get("date")) >= start_of_week
+            if entry.date and datetime.date.fromisoformat(entry.date) >= start_of_week
         ]
 
         structured_prompt = """
@@ -454,7 +461,7 @@ async def generate_prompt_response(prompt: PromptInput):
         que genera respuestas motivadoras y positivas.
         Basándote en el siguiente prompt del usuario y las entradas a su diario,
         genera una respuesta breve y alentadora. Las entradas del diario están en formato JSON,
-        corresponden a la semana acutal
+        corresponden a la semana actual
         y contienen el estado de ánimo, nota e imagen etiquetada del usuario.
         Tu respuesta debe ser en español y no debe exceder 100 palabras.
         Usuario: {user_prompt}
@@ -478,26 +485,33 @@ async def signup_user(SignupInput: SignupInput):
         JSONResponse: Confirmación de registro exitoso o error si el usuario ya existe
     """
     try:
-        User = Query()
         # Verificar si el usuario ya existe
-        if users_db.search(User.email == SignupInput.email):
+        existing_user = await User.find_one(User.email == SignupInput.email)
+        if existing_user:
             raise HTTPException(status_code=400, detail="El usuario ya existe")
 
         # Crear nuevo usuario
-        new_user = {
-            "user": f"user_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{hash(SignupInput.email) % 10000}",
-            "email": SignupInput.email,
-            "password": SignupInput.password,
-            "nickname": SignupInput.nickname,
-            "last_login": None,
-            "streak": 1,
-            "best_streak": 1
-        }
-        users_db.insert(new_user)
-        return JSONResponse(content={"message": "Usuario registrado exitosamente"})
+        new_user = User(
+            user_id=f"user_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{hash(SignupInput.email) % 10000}",
+            email=SignupInput.email,
+            password=SignupInput.password,
+            nickname=SignupInput.nickname,
+            last_login=None,
+            streak=1,
+            best_streak=1,
+            points=0
+        )
+        await new_user.insert()
+        logger.info(f"✓ Created new user: {new_user.user_id} ({SignupInput.email})")
+        return JSONResponse(content={
+            "message": "Usuario creado exitosamente",
+            "user": new_user.user_id
+        })
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error de registro: {e}")
-        raise HTTPException(status_code=400, detail="El usuario ya existe")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @app.post("/login")
 async def login_user(LoginInput: LoginInput):
@@ -507,25 +521,23 @@ async def login_user(LoginInput: LoginInput):
         LoginInput: Credenciales del usuario (email y password)
     """
     try:
-        User = Query()
-        result = users_db.search((User.email == LoginInput.email) & (User.password == LoginInput.password))
-        if result:
-            user_data = result[0]
+        # Buscar usuario por email y password
+        user = await User.find_one(User.email == LoginInput.email, User.password == LoginInput.password)
+        if user:
             current_time = datetime.datetime.now()
 
             # Obtener la última fecha de login (si existe)
-            last_login = user_data.get("last_login")
-            current_streak = user_data.get("streak", 0)
-            points = user_data.get("points", 0)
-            best_streak = user_data.get("best_streak", 0)
+            last_login = user.last_login
+            current_streak = user.streak
+            points = user.points
+            best_streak = user.best_streak
 
             # Calcular nuevo streak
             if last_login:
-                last_login_datetime = datetime.datetime.fromisoformat(last_login)
-                time_diff = current_time - last_login_datetime
+                time_diff = current_time - last_login
 
                 # Verificar si es un día diferente
-                last_login_date = last_login_datetime.date()
+                last_login_date = last_login.date()
                 current_date = current_time.date()
                 is_different_day = last_login_date != current_date
 
@@ -548,24 +560,21 @@ async def login_user(LoginInput: LoginInput):
                 best_streak = current_streak
 
             # Actualizar datos del usuario
-            updated_user_data = {
-                **user_data,
-                "last_login": current_time.isoformat(),
+            await user.update({
+                "$set": {
+                    "last_login": current_time,
+                    "streak": current_streak,
+                    "best_streak": best_streak,
+                    "points": points
+                }
+            })
+
+            result = {
+                "user": user.user_id,
+                "nickname": user.nickname,
                 "streak": current_streak,
                 "best_streak": best_streak,
                 "points": points
-            }
-
-            users_db.update(updated_user_data, (User.email == LoginInput.email))
-
-            # Convertir TinyDB Result a dict estándar
-            result = json.loads(json.dumps(updated_user_data))
-            result = {
-                "user": result["user"],
-                "nickname": result["nickname"],
-                "streak": result["streak"],
-                "best_streak": result["best_streak"],
-                "points": result["points"]
             }
             return JSONResponse(content={
                 "message": "Inicio de sesión exitoso",
@@ -573,9 +582,11 @@ async def login_user(LoginInput: LoginInput):
             })
         else:
             raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error de inicio de sesión: {e}")
-        raise HTTPException(status_code=400, detail="Error en el proceso de inicio de sesión")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 # ============================================================================
 # PUNTO DE ENTRADA DE LA APLICACIÓN
 # ============================================================================

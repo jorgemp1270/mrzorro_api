@@ -6,41 +6,103 @@ Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro.
 
 - **Sistema de Usuarios**: Registro, login y gestión de streak diario
 - **Sistema de Puntos**: Recompensas por actividades del diario (5 puntos por entrada)
-- **Procesamiento de imágenes**: Clasificación automática usando ResNet-50 pre-entrenado
+- **Procesamiento de imágenes**: Clasificación automática usando ResNet-50 pre-entrenado (CPU-optimizado)
 - **IA Generativa**: Integración con Google Gemini AI para recomendaciones personalizadas
-- **Base de datos multi-usuario**: Almacenamiento separado por usuario con TinyDB
+- **Base de datos MongoDB**: Almacenamiento escalable con Beanie ODM
 - **API RESTful**: Endpoints completos para gestión de diario con autenticación
 - **Sistema de Streak**: Seguimiento de días consecutivos de login
+- **Containerización**: Despliegue con Docker y Docker Compose
 
 ## 📋 Requisitos
 
-- Python 3.8+
-- PyTorch
-- FastAPI
+### Para Desarrollo con Docker (Recomendado)
+- Docker Desktop
+- Docker Compose
+- Git
 - Google Gemini API Key
 
-## 🛠️ Instalación
+### Para Desarrollo Local
+- Python 3.11+
+- MongoDB (local o remoto)
+- Google Gemini API Key
 
-1. Clona el repositorio:
+## 🚀 Instalación y Ejecución
+
+### Opción 1: Docker (Recomendado)
+
+1. **Clona el repositorio:**
 ```bash
-git clone <repository-url>
-cd backend
+git clone https://github.com/jorgemp1270/mrzorro_api.git
+cd mrzorro_api
 ```
 
-2. Instala las dependencias:
+2. **Configura las variables de entorno:**
+Crea un archivo `.env` en el directorio raíz:
+```env
+GEMINI_API_KEY=tu_api_key_de_gemini_aqui
+MONGODB_URL=mongodb://mongo:27017
+DATABASE_NAME=mrzorro_db
+```
+
+3. **Construye y ejecuta con Docker Compose:**
 ```bash
+# Construir y ejecutar en segundo plano
+docker-compose up --build -d
+
+# Ver logs en tiempo real
+docker-compose logs -f app
+
+# Verificar que los servicios estén corriendo
+docker-compose ps
+```
+
+4. **La API estará disponible en:**
+- **API**: http://localhost:8000
+- **Documentación interactiva**: http://localhost:8000/docs
+- **MongoDB**: localhost:27017
+
+5. **Para detener los servicios:**
+```bash
+# Detener servicios
+docker-compose down
+
+# Detener y eliminar volúmenes (⚠️ elimina datos)
+docker-compose down -v
+```
+
+### Opción 2: Desarrollo Local
+
+1. **Clona el repositorio:**
+```bash
+git clone https://github.com/jorgemp1270/mrzorro_api.git
+cd mrzorro_api
+```
+
+2. **Instala MongoDB localmente o usa Docker:**
+```bash
+# Con Docker
+docker run -d -p 27017:27017 --name mongodb mongo:7.0
+
+# O instalar MongoDB localmente desde https://www.mongodb.com/try/download/community
+```
+
+3. **Crea un entorno virtual e instala dependencias:**
+```bash
+python -m venv venv
+source venv/bin/activate  # En Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Configura las variables de entorno:
-Crea un archivo `.env` en el directorio raíz con:
-```
-GEMINI_API_KEY=tu_api_key_aqui
+4. **Configura las variables de entorno:**
+```env
+GEMINI_API_KEY=tu_api_key_de_gemini_aqui
+MONGODB_URL=mongodb://localhost:27017
+DATABASE_NAME=mrzorro_db
 ```
 
-4. Ejecuta la aplicación:
+5. **Ejecuta la aplicación:**
 ```bash
-fastapi dev app/main.py
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## 📁 Estructura del Proyecto
@@ -49,15 +111,23 @@ fastapi dev app/main.py
 backend/
 ├── app/
 │   ├── main.py          # Aplicación principal FastAPI
-│   └── schemas.py       # Modelos Pydantic para validación
-├── db/
-│   ├── db.json          # Base de datos de entradas de diario
-│   └── users.json       # Base de datos de usuarios
+│   ├── schemas.py       # Modelos Pydantic para validación
+│   ├── models.py        # Modelos MongoDB con Beanie
+│   └── database.py      # Configuración de conexión MongoDB
 ├── models/
 │   └── resnet50/        # Modelo ResNet-50 y archivos relacionados
 │       ├── resnet50-0676ba61.pth
 │       └── imagenet_class_index.json
+├── scripts/
+│   └── migrate_data.py  # Script de migración de datos TinyDB → MongoDB
+├── db/                  # Datos legacy de TinyDB (para migración)
+│   ├── db.json
+│   └── users.json
 ├── .env                 # Variables de entorno (no versionado)
+├── .dockerignore        # Archivos excluidos del contexto Docker
+├── Dockerfile           # Configuración de imagen Docker
+├── docker-compose.yml   # Orquestación de servicios
+├── init-mongo.js        # Script de inicialización MongoDB
 ├── requirements.txt     # Dependencias Python
 └── README.md           # Este archivo
 ```
@@ -66,7 +136,7 @@ backend/
 
 ### 🔐 Autenticación de Usuarios
 
-### 1. Registrar nuevo usuario
+#### 1. Registrar nuevo usuario
 - **URL**: `/signup`
 - **Método**: `POST`
 - **Descripción**: Registra un nuevo usuario en el sistema
@@ -82,11 +152,11 @@ backend/
 ```json
 {
     "message": "Usuario creado exitosamente",
-    "user": "user_20251117203959_8322"
+    "user": "user_20251120143059_1234"
 }
 ```
 
-### 2. Iniciar sesión
+#### 2. Iniciar sesión
 - **URL**: `/login`
 - **Método**: `POST`
 - **Descripción**: Inicia sesión y actualiza el streak del usuario
@@ -102,22 +172,18 @@ backend/
 {
     "message": "Inicio de sesión exitoso",
     "user": {
-        "email": "usuario@email.com",
+        "user": "user_20251120143059_1234",
+        "nickname": "MiApodo",
         "streak": 5,
         "best_streak": 10,
-        "points": 45,
-        "last_login": "2025-11-17T20:30:00"
+        "points": 45
     }
 }
 ```
-- **Lógica de Streak**:
-  - Incrementa streak si el login es en día diferente y < 24h del último login
-  - Resetea streak a 1 si han pasado > 24h
-  - Actualiza best_streak si streak actual > mejor streak histórico
 
 ### 📚 Gestión de Diario
 
-### 3. Información de la API
+#### 3. Información de la API
 - **URL**: `/`
 - **Método**: `GET`
 - **Descripción**: Retorna información básica de la aplicación
@@ -128,6 +194,99 @@ backend/
     "version": "1.0.0",
     "description": "API para la app Mr.Zorro"
 }
+```
+
+#### 4. Obtener entradas del diario por usuario
+- **URL**: `/diary/{user}`
+- **Método**: `GET`
+- **Descripción**: Obtiene todas las entradas del diario para un usuario específico
+- **Parámetros**:
+  - `user` (string): ID único del usuario
+- **Respuesta**: Array de entradas del diario del usuario
+
+#### 5. Agregar nueva entrada al diario
+- **URL**: `/diary`
+- **Método**: `POST`
+- **Descripción**: Agrega una nueva entrada al diario con procesamiento de IA
+- **Cuerpo de la petición**:
+```json
+{
+    "user": "user_20251120143059_1234",
+    "mood": "feliz",
+    "title": "Mi día especial",
+    "note": "Mi nota del día (opcional)",
+    "img": "imagen_en_base64 (opcional)"
+}
+```
+- **Respuesta exitosa (nueva entrada)**:
+```json
+{
+    "message": "Entrada agregada exitosamente",
+    "points_earned": 5,
+    "total_points": 25
+}
+```
+
+### 🖼️ Procesamiento de Imágenes
+
+#### 6. Actualizar imagen en entrada existente
+- **URL**: `/update-image`
+- **Método**: `POST`
+- **Descripción**: Actualiza la imagen en una entrada existente y regenera recomendación IA
+
+#### 7. Predecir etiqueta de imagen
+- **URL**: `/predict-image`
+- **Método**: `POST`
+- **Descripción**: Clasifica una imagen usando ResNet-50 y proporciona contexto del diario
+
+### 🤖 IA Generativa
+
+#### 8. Generar respuesta personalizada
+- **URL**: `/prompt`
+- **Método**: `POST`
+- **Descripción**: Genera respuesta usando Gemini AI basada en prompt y entradas de la semana
+
+## 🛠️ Gestión y Monitoreo
+
+### Ver Datos en MongoDB
+```bash
+# Conectar a MongoDB
+docker exec -it mrzorro-mongo mongosh
+
+# Usar base de datos
+use mrzorro_db
+
+# Ver usuarios
+db.users.find().pretty()
+
+# Ver entradas de diario
+db.diary_entries.find().pretty()
+
+# Contar documentos
+db.users.countDocuments()
+db.diary_entries.countDocuments()
+```
+
+### Logs de la Aplicación
+```bash
+# Ver logs de la aplicación
+docker-compose logs -f app
+
+# Ver logs de MongoDB
+docker-compose logs -f mongo
+
+# Ver todos los logs
+docker-compose logs -f
+```
+
+### Migración de Datos TinyDB → MongoDB
+Si tienes datos existentes en TinyDB, puedes migrarlos:
+```bash
+# Asegúrate de que MongoDB esté corriendo
+docker-compose up -d mongo
+
+# Ejecutar script de migración
+python scripts/migrate_data.py
 ```
 
 ### 4. Obtener entradas del diario por usuario
@@ -338,75 +497,100 @@ La aplicación utiliza TinyDB, una base de datos JSON ligera con dos archivos pr
 ## 🔐 Sistema de Autenticación
 
 ### **Validación de Usuario**
-- Todos los endpoints que requieren `user` validan que el usuario existe en `users.json`
-- Retorna error `404 - Usuario no encontrado` si el ID no existe
+## 📊 Base de Datos MongoDB
 
-### **Registro de Usuarios**
-- Genera ID único con timestamp: `user_YYYYMMDDHHMMSS_XXXX`
-- Valida emails únicos y almacena credenciales
+La aplicación utiliza MongoDB como base de datos principal con las siguientes colecciones:
 
-### **Sistema de Streak**
-- **Incremento**: Solo en días diferentes y < 24h del último login
-- **Reset**: A 1 si han pasado > 24h del último login
-- **Mejor Streak**: Se actualiza automáticamente cuando se supera el récord
+### **Colección: users**
+- **Usuarios registrados** con credenciales, streak y sistema de puntos
+- **Campos**: `user_id` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`, `points`, `created_at`
+- **Indexes**: `user_id` (único), `email` (único)
 
-### **Sistema de Puntos**
-- **5 puntos** por cada nueva entrada de diario
-- Los puntos **NO se otorgan** al actualizar entradas existentes
-- Acumulación total visible en perfil de usuario
-- Sistema de recompensas para fomentar el uso diario## 🔐 Configuración de Seguridad
+### **Colección: diary_entries**
+- **Entradas diarias** filtradas por usuario con fecha como identificador
+- **Estados de ánimo, notas y títulos** del usuario
+- **Etiquetas de imágenes** procesadas por ResNet-50
+- **Respuestas generadas por IA** (overview con mensaje, recomendación y dato curioso)
+- **Indexes**: `user_id + date` (compuesto único), `user_id`, `date`
 
-Asegúrate de:
-- Mantener tu `GEMINI_API_KEY` segura en el archivo `.env`
-- No subir el archivo `.env` al control de versiones
-- Configurar CORS apropiadamente para producción
+## 🤖 Integración con IA
 
-## 🚀 Despliegue
+### **Google Gemini AI (gemini-2.5-flash)**
+La API utiliza Google Gemini AI para generar:
+- **Mensajes motivadores personalizados** basados en el estado de ánimo
+- **Recomendaciones diarias** adaptadas al contexto del usuario
+- **Datos curiosos** relacionados con las actividades del día
+- **Respuestas a prompts personalizados** analizando las entradas de la semana
 
-Para desplegar en producción:
+### **ResNet-50 para Clasificación de Imágenes**
+- Modelo pre-entrenado en ImageNet con 1000 clases (CPU optimizado)
+- Clasifica imágenes automáticamente cuando se suben al diario
+- Las etiquetas predichas se integran en las recomendaciones de IA
+- Procesa imágenes en formato base64
 
-1. Configura las variables de entorno en tu servidor
-2. Usa un servidor WSGI como Gunicorn:
+## 🔧 Desarrollo
+
+### **Stack Tecnológico**
+- **Backend**: FastAPI (Python 3.11+)
+- **Base de Datos**: MongoDB con Beanie ODM
+- **IA**: Google Gemini AI + PyTorch (ResNet-50)
+- **Containerización**: Docker + Docker Compose
+- **Image Processing**: Pillow + Torchvision
+
+### **Ejecutar en modo desarrollo**
 ```bash
-pip install gunicorn
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
+# Con auto-reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Solo contenedor de MongoDB
+docker-compose up -d mongo
 ```
 
-## 📝 Notas Adicionales
+### **Variables de Entorno**
+```env
+GEMINI_API_KEY=tu_api_key_de_gemini
+MONGODB_URL=mongodb://localhost:27017  # Para desarrollo local
+DATABASE_NAME=mrzorro_db
+```
+
+## 📝 Notas Importantes
 
 - La API procesa imágenes en formato base64
 - Las fechas deben estar en formato ISO (YYYY-MM-DD)
 - Las respuestas de IA están limitadas a 100 palabras
-- Las bases de datos se crean automáticamente en la primera ejecución
+- MongoDB se inicializa automáticamente con índices en el primer arranque
 - Todos los endpoints con `user` validan la existencia del usuario
-- **Sistema de Puntos**: Se otorgan 5 puntos por cada nueva entrada de diario (no por actualizaciones)
-- **Diferencia entre endpoints de imágenes**:
-  - `/update-image`: Actualiza una entrada de diario existente con nueva imagen y regenera IA
-  - `/predict-image`: Solo predice etiqueta de imagen y proporciona contexto del diario
-- El endpoint `/prompt` solo analiza entradas de la semana actual del usuario específico
-- Se utiliza configuración absoluta de rutas para archivos `.env` y modelos
-- Los modelos Pydantic están organizados en `app/schemas.py` para mejor mantenibilidad
+- **Sistema de Puntos**: Se otorgan 5 puntos por cada nueva entrada de diario
+- **Sistema de Streak**: Login diario incrementa streak, >24h lo resetea
 
-## 🧪 Desarrollo
+## 🧪 Testing
 
-### Ejecutar en modo desarrollo
+### **Probar API con curl**
 ```bash
-fastapi dev app/main.py
+# Health check
+curl http://localhost:8000
+
+# Registro de usuario
+curl -X POST "http://localhost:8000/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@test.com", "password": "password123", "nickname": "Test"}'
+
+# Login
+curl -X POST "http://localhost:8000/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@test.com", "password": "password123"}'
 ```
 
-### Estructura de Esquemas
-Los modelos de datos están definidos en `app/schemas.py`:
-- `DiaryEntry`: Entrada de diario del usuario (incluye campo `user`)
-- `GeminiResponseModel`: Respuesta estructurada con mensaje, recomendación y dato curioso
-- `GeminiBaseResponse`: Respuesta simple para prompts personalizados
-- `ImageInput`: Entrada para predicción y actualización de imágenes en diario (incluye `user`, `date`, `img`)
-- `ImagePrediction`: Entrada para predicción independiente de imágenes (incluye `user`, `img`)
-- `PromptInput`: Entrada para prompts personalizados (incluye campo `user`)
-- `LoginInput`: Credenciales de inicio de sesión
-- `SignupInput`: Datos de registro de nuevo usuario
+### **Documentación Interactiva**
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
-### Flujo de Autenticación
-1. **Registro**: `/signup` → genera ID único y almacena usuario
-2. **Login**: `/login` → valida credenciales y actualiza streak
-3. **Operaciones**: Todos los endpoints validan que el `user` existe
-4. **Datos**: Cada usuario solo accede a sus propios datos de diario
+## 🔐 Seguridad
+
+- Mantén tu `GEMINI_API_KEY` segura en el archivo `.env`
+- No subas el archivo `.env` al control de versiones
+- Para producción, usa variables de entorno del sistema o secrets de Docker/Kubernetes
+
+---
+
+**Desarrollado con ❤️ usando FastAPI, MongoDB, y Docker**

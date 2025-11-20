@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: mrzorro-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_NAME=mrzorro_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - mongo
+    volumes:
+      - ./models:/app/models
+    restart: unless-stopped
+    networks:
+      - mrzorro-network
+
+  mongo:
+    image: mongo:7.0
+    container_name: mrzorro-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=mrzorro_db
+    volumes:
+      - mongo_data:/data/db
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    restart: unless-stopped
+    networks:
+      - mrzorro-network
+
+volumes:
+  mongo_data:
+
+
+networks:
+  mrzorro-network:
+    driver: bridge
