@@ -5,6 +5,7 @@ Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro.
 ## 🚀 Características
 
 - **Sistema de Usuarios**: Registro, login y gestión de streak diario
+- **Sistema de Puntos**: Recompensas por actividades del diario (5 puntos por entrada)
 - **Procesamiento de imágenes**: Clasificación automática usando ResNet-50 pre-entrenado
 - **IA Generativa**: Integración con Google Gemini AI para recomendaciones personalizadas
 - **Base de datos multi-usuario**: Almacenamiento separado por usuario con TinyDB
@@ -104,6 +105,7 @@ backend/
         "email": "usuario@email.com",
         "streak": 5,
         "best_streak": 10,
+        "points": 45,
         "last_login": "2025-11-17T20:30:00"
     }
 }
@@ -194,10 +196,12 @@ backend/
   - `title` (string, opcional): Título del día
   - `note` (string, opcional): Nota personal del usuario
   - `img` (string, opcional): Imagen codificada en base64
-- **Respuesta exitosa**:
+- **Respuesta exitosa (nueva entrada)**:
 ```json
 {
-    "message": "Entrada agregada exitosamente"
+    "message": "Entrada agregada exitosamente",
+    "points_earned": 5,
+    "total_points": 25
 }
 ```
 - **Si ya existe entrada para la fecha**:
@@ -319,9 +323,10 @@ La API utiliza Google Gemini AI para generar:
 La aplicación utiliza TinyDB, una base de datos JSON ligera con dos archivos principales:
 
 ### **users.json**
-- **Usuarios registrados** con credenciales y datos de streak
-- **Campos**: `user` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`
+- **Usuarios registrados** con credenciales, streak y sistema de puntos
+- **Campos**: `user` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`, `points`
 - **Sistema de Streak**: Seguimiento automático de días consecutivos de login
+- **Sistema de Puntos**: Acumulación de puntos por actividades (5 puntos por entrada de diario)
 
 ### **db.json**
 - **Entradas diarias** filtradas por usuario con fecha como identificador
@@ -345,7 +350,11 @@ La aplicación utiliza TinyDB, una base de datos JSON ligera con dos archivos pr
 - **Reset**: A 1 si han pasado > 24h del último login
 - **Mejor Streak**: Se actualiza automáticamente cuando se supera el récord
 
-## 🔐 Configuración de Seguridad
+### **Sistema de Puntos**
+- **5 puntos** por cada nueva entrada de diario
+- Los puntos **NO se otorgan** al actualizar entradas existentes
+- Acumulación total visible en perfil de usuario
+- Sistema de recompensas para fomentar el uso diario## 🔐 Configuración de Seguridad
 
 Asegúrate de:
 - Mantener tu `GEMINI_API_KEY` segura en el archivo `.env`
@@ -370,6 +379,7 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 - Las respuestas de IA están limitadas a 100 palabras
 - Las bases de datos se crean automáticamente en la primera ejecución
 - Todos los endpoints con `user` validan la existencia del usuario
+- **Sistema de Puntos**: Se otorgan 5 puntos por cada nueva entrada de diario (no por actualizaciones)
 - **Diferencia entre endpoints de imágenes**:
   - `/update-image`: Actualiza una entrada de diario existente con nueva imagen y regenera IA
   - `/predict-image`: Solo predice etiqueta de imagen y proporciona contexto del diario
