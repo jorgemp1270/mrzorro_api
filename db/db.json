@@ -11,7 +11,7 @@
         },
         "2": {
             "user": "user_20251118195123_2360",
-            "date": "2025-11-15",
+            "date": "2025-11-18",
             "overview": {
                 "message": "\u00a1\u00c1nimo! Aunque hoy haya sido un d\u00eda triste, recuerda que tu val\u00eda no depende de la compa\u00f1\u00eda. Eres incre\u00edble tal como eres.",
                 "recommendation": "Ma\u00f1ana, \u00bfqu\u00e9 tal si intentas algo que te guste solo a ti? A veces, disfrutar de tu propia compa\u00f1\u00eda es un gran regalo. \u00a1Un nuevo d\u00eda te espera!",
@@ -21,6 +21,45 @@
             "title": "D\u00eda solitario",
             "note": "Hoy tuve un d\u00eda triste, mis amigos en la escuela no fueron y me la pas\u00e9 s\u00f3lo todo el d\u00eda",
             "img": "red fox"
+        },
+        "3": {
+            "user": "user_20251118195123_2360",
+            "date": "2025-11-19",
+            "overview": {
+                "message": "Hola, amigo. Entiendo que te sientas cansado y triste por el trabajo. Recuerda que tu esfuerzo es valioso, pero tambi\u00e9n lo es tu bienestar.",
+                "recommendation": "Mr. Zorro te sugiere tomar un breve descanso. Perm\u00edtete unos minutos para desconectar, estirar las piernas o simplemente cerrar los ojos. \u00a1Te lo mereces!",
+                "interesting_fact": "Dato curioso: Aunque un reloj digital muestra la hora exacta, tu cuerpo tiene su propio 'reloj interno' que te dice cu\u00e1ndo necesitas recargar energ\u00edas. \u00a1Esc\u00fachalo!"
+            },
+            "mood": "sad",
+            "title": "hola",
+            "note": "eStoy cansado de trabajar",
+            "img": "digital clock"
+        },
+        "4": {
+            "user": "user_20251119185906_8793",
+            "date": "2025-11-19",
+            "overview": {
+                "message": "\u00a1Hola! Soy Mr. Zorro. Entiendo que hoy te sientas cansado, pero recuerda que cada d\u00eda es una nueva oportunidad para avanzar.",
+                "recommendation": "Para ma\u00f1ana, enf\u00f3cate en tu proyecto. Divide las tareas en bloques de tiempo manejables, como los d\u00edgitos de un reloj, y descansa entre ellos para mantener tu energ\u00eda y concentraci\u00f3n.",
+                "interesting_fact": "\u00bfSab\u00edas que tomar descansos regulares y planificados, como los intervalos de un reloj digital, puede aumentar tu productividad y creatividad para terminar tu proyecto?"
+            },
+            "mood": "tired",
+            "title": "Prueba titulo de la nota",
+            "note": "\u00bfQu\u00e9 te gustar\u00eda lograr ma\u00f1ana?\nTerminar mi proyecto",
+            "img": "digital clock"
+        },
+        "5": {
+            "user": "user_20251119190639_1824",
+            "date": "2025-11-19",
+            "overview": {
+                "message": "\u00a1Hola! Aunque el cansancio se sienta hoy, recuerda que cada momento cuenta. Tu esfuerzo es valioso y te acerca a tus metas.",
+                "recommendation": "Mr. Zorro te aconseja: como un reloj digital que marca el tiempo, t\u00f3mate un instante para pausar. Reflexiona en algo por lo que est\u00e9s agradecido. Un peque\u00f1o respiro renueva tu esp\u00edritu.",
+                "interesting_fact": "Dato curioso: \u00bfSab\u00edas que los primeros relojes digitales no aparecieron hasta la d\u00e9cada de 1970? \u00a1Antes, la hora era puramente anal\u00f3gica y se le\u00eda de otra manera!"
+            },
+            "mood": "tired",
+            "title": "prueba titulo",
+            "note": "\u00bfPor qu\u00e9 est\u00e1s agradecido hoy?\nhola estoy es una prueba",
+            "img": "digital clock"
         }
     }
 }
