@@ -27,6 +27,7 @@ from .schemas import (
     GeminiBaseResponse,
     ImageInput,
     ImagePrediction,
+    PurchaseInput,
     LoginInput,
     PromptInput,
     SignupInput
@@ -473,6 +474,71 @@ async def generate_prompt_response(prompt: PromptInput):
         logger.error(f"Error de predicción: {e}")
         raise HTTPException(status_code=400, detail="Error en generación de respuesta")
 
+@app.post("/purchase")
+async def make_purchase(input: PurchaseInput):
+    """
+    Actualiza los puntos del usuario tras una compra.
+
+    Args:
+        input (PointsUpdateInput): Objeto con ID del usuario, precio en puntos
+        y el tema comprado
+
+    Returns:
+        JSONResponse: Puntos actualizados del usuario
+    """
+    # Validar que el usuario existe
+    if not await validate_user_exists(input.user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    try:
+        user = await User.find_one(User.user_id == input.user)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        current_points = user.points
+        new_points = current_points - input.price
+
+        if new_points < 0:
+            raise HTTPException(status_code=400, detail="Puntos insuficientes para la compra")
+
+        await user.update({"$set": {"points": new_points}})
+        # Check if theme already exists in user's themes
+        if input.theme in user.themes:
+            raise HTTPException(status_code=400, detail="El tema ya ha sido comprado previamente")
+
+        await user.update({"$addToSet": {"themes": input.theme}})
+        logger.info(f"✓ Updated user {input.user} points: {current_points} → {new_points}, added theme: {input.theme}")
+
+        return JSONResponse(content={
+            "message": "Compra realizada exitosamente",
+            "new_points": new_points
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error de compra: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.get("/points/{user}")
+async def get_user_points(user: str):
+    """
+    Obtiene los puntos actuales de un usuario.
+
+    Args:
+        user (str): ID único del usuario
+
+    Returns:
+        JSONResponse: Puntos actuales del usuario
+    """
+    # Validar que el usuario existe
+    if not await validate_user_exists(user):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user_obj = await User.find_one(User.user_id == user)
+    if user_obj:
+        return JSONResponse(content={"points": user_obj.points})
+    else:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
 @app.post("/signup")
 async def signup_user(SignupInput: SignupInput):
     """
@@ -574,7 +640,8 @@ async def login_user(LoginInput: LoginInput):
                 "nickname": user.nickname,
                 "streak": current_streak,
                 "best_streak": best_streak,
-                "points": points
+                "points": points,
+                "themes": set(user.themes) if user.themes else []
             }
             return JSONResponse(content={
                 "message": "Inicio de sesión exitoso",

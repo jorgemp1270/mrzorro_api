@@ -37,11 +37,16 @@ class ImagePrediction(BaseModel):
     user: str  # ID único del usuario
     img: str  # Etiqueta predicha para la imagen
 
-
 class PromptInput(BaseModel):
     """Modelo para entrada de prompt"""
     user: str  # ID único del usuario
     prompt: str  # Texto del prompt a enviar
+
+class PurchaseInput(BaseModel):
+    """Modelo para actualización de puntos del usuario"""
+    user: str  # ID único del usuario
+    price: int  # Precio en puntos a deducir
+    theme: str  # Tema comprado
 
 class LoginInput(BaseModel):
     """Modelo para entrada de login"""

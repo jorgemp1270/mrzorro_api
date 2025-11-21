@@ -20,6 +20,7 @@ class User(Document):
     streak: int = 1
     best_streak: int = 1
     points: int = 0
+    themes: Optional[set[str]] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
