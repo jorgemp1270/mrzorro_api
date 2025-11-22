@@ -474,14 +474,14 @@ async def generate_prompt_response(prompt: PromptInput):
         logger.error(f"Error de predicción: {e}")
         raise HTTPException(status_code=400, detail="Error en generación de respuesta")
 
-@app.post("/purchase")
+@app.post("/make-purchase")
 async def make_purchase(input: PurchaseInput):
     """
     Actualiza los puntos del usuario tras una compra.
 
     Args:
-        input (PointsUpdateInput): Objeto con ID del usuario, precio en puntos
-        y el tema comprado
+        input (PurchaseInput): Objeto con ID del usuario, precio en puntos
+        y el tema o fuente comprada
 
     Returns:
         JSONResponse: Puntos actualizados del usuario
@@ -489,24 +489,48 @@ async def make_purchase(input: PurchaseInput):
     # Validar que el usuario existe
     if not await validate_user_exists(input.user):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
     try:
+        # Convert price from string to int
+        try:
+            price = int(float(input.price))  # Handle both int and float strings
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Precio inválido")
+
         user = await User.find_one(User.user_id == input.user)
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
         current_points = user.points
-        new_points = current_points - input.price
+        new_points = current_points - price
 
         if new_points < 0:
             raise HTTPException(status_code=400, detail="Puntos insuficientes para la compra")
 
-        await user.update({"$set": {"points": new_points}})
-        # Check if theme already exists in user's themes
-        if input.theme in user.themes:
-            raise HTTPException(status_code=400, detail="El tema ya ha sido comprado previamente")
+        # Must specify exactly one: theme OR font
+        if not input.theme and not input.font:
+            raise HTTPException(status_code=400, detail="Debe especificar un tema o una fuente para la compra")
 
-        await user.update({"$addToSet": {"themes": input.theme}})
-        logger.info(f"✓ Updated user {input.user} points: {current_points} → {new_points}, added theme: {input.theme}")
+        if input.theme and input.font:
+            raise HTTPException(status_code=400, detail="Solo puede comprar un tema o una fuente por transacción")
+
+        # Initialize themes and fonts if None
+        user_themes = user.themes or []
+        user_fonts = user.fonts or []
+
+        # Process theme purchase
+        if input.theme:
+            if input.theme in user_themes:
+                raise HTTPException(status_code=400, detail="El tema ya ha sido comprado previamente")
+            await user.update({"$addToSet": {"themes": input.theme}, "$set": {"points": new_points}})
+            logger.info(f"✓ User {input.user} purchased theme '{input.theme}' for {price} points")
+
+        # Process font purchase
+        elif input.font:
+            if input.font in user_fonts:
+                raise HTTPException(status_code=400, detail="La fuente ya ha sido comprada previamente")
+            await user.update({"$addToSet": {"fonts": input.font}, "$set": {"points": new_points}})
+            logger.info(f"✓ User {input.user} purchased font '{input.font}' for {price} points")
 
         return JSONResponse(content={
             "message": "Compra realizada exitosamente",
@@ -518,8 +542,8 @@ async def make_purchase(input: PurchaseInput):
         logger.error(f"Error de compra: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
-@app.get("/points/{user}")
-async def get_user_points(user: str):
+@app.get("/purchases/{user}")
+async def get_user_purchases(user: str):
     """
     Obtiene los puntos actuales de un usuario.
 
@@ -535,7 +559,9 @@ async def get_user_points(user: str):
 
     user_obj = await User.find_one(User.user_id == user)
     if user_obj:
-        return JSONResponse(content={"points": user_obj.points})
+        return JSONResponse(content={"points": user_obj.points,
+                                     "themes": list(user_obj.themes) if user_obj.themes else [],
+                                     "fonts": list(user_obj.fonts) if user_obj.fonts else []})
     else:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
@@ -641,7 +667,8 @@ async def login_user(LoginInput: LoginInput):
                 "streak": current_streak,
                 "best_streak": best_streak,
                 "points": points,
-                "themes": set(user.themes) if user.themes else []
+                "themes": list(user.themes) if user.themes else [],
+                "fonts": list(user.fonts) if user.fonts else []
             }
             return JSONResponse(content={
                 "message": "Inicio de sesión exitoso",

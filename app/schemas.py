@@ -45,8 +45,9 @@ class PromptInput(BaseModel):
 class PurchaseInput(BaseModel):
     """Modelo para actualización de puntos del usuario"""
     user: str  # ID único del usuario
-    price: int  # Precio en puntos a deducir
-    theme: str  # Tema comprado
+    price: str  # Precio en puntos a deducir (como string desde Flutter)
+    theme: str | None = None  # Tema comprado
+    font: str | None = None   # Fuente comprada
 
 class LoginInput(BaseModel):
     """Modelo para entrada de login"""
