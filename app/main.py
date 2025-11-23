@@ -404,13 +404,10 @@ async def add_diary_entry(entry: DiaryEntry):
     # Generar respuesta personalizada con IA
     overview = prompt_gemini(filled_prompt, GeminiResponseModel)
 
-     # Obtener fecha actual
-    date = datetime.date.today().isoformat()
-
     # Crear estructura de datos para almacenar
     entry_data = {
         "user_id": entry.user,
-        "date": date,
+        "date": entry.date,
         "overview": overview.model_dump(),
         "mood": entry.mood,
         "title": entry.title,
@@ -419,7 +416,7 @@ async def add_diary_entry(entry: DiaryEntry):
     }
 
     # Verificar si ya existe una entrada para la fecha actual y usuario, actualizar si es así
-    existing_entry = await DiaryEntryDoc.find_one(DiaryEntryDoc.user_id == entry.user, DiaryEntryDoc.date == date)
+    existing_entry = await DiaryEntryDoc.find_one(DiaryEntryDoc.user_id == entry.user, DiaryEntryDoc.date == entry.date)
     if existing_entry:
         await existing_entry.update({"$set": entry_data})
         return JSONResponse(content={"message": "Entrada actualizada exitosamente"})
@@ -427,7 +424,7 @@ async def add_diary_entry(entry: DiaryEntry):
     # Crear nueva entrada
     new_entry = DiaryEntryDoc(**entry_data)
     await new_entry.insert()
-    logger.info(f"✓ Created diary entry for user {entry.user} on {date}")
+    logger.info(f"✓ Created diary entry for user {entry.user} on {entry.date}")
 
     # Otorgar 5 puntos al usuario por agregar una entrada
     user = await User.find_one(User.user_id == entry.user)
@@ -444,60 +441,60 @@ async def add_diary_entry(entry: DiaryEntry):
         "total_points": new_points
     })
 
-@app.post("/update-image")
-async def update_image_prediction(input: ImageInput):
-    """
-    Predice la etiqueta de una imagen y actualiza la entrada del diario correspondiente.
+# @app.post("/update-image")
+# async def update_image_prediction(input: ImageInput):
+#     """
+#     Predice la etiqueta de una imagen y actualiza la entrada del diario correspondiente.
 
-    Args:
-        input (ImageInput): Objeto con fecha e imagen en base64
+#     Args:
+#         input (ImageInput): Objeto con fecha e imagen en base64
 
-    Returns:
-        JSONResponse: Fecha y etiqueta predicha de la imagen
+#     Returns:
+#         JSONResponse: Fecha y etiqueta predicha de la imagen
 
-    Raises:
-        HTTPException: Error 400 si la imagen/fecha es inválida o hay error en predicción
-    """
-    # Validar que el usuario existe
-    if not await validate_user_exists(input.user):
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+#     Raises:
+#         HTTPException: Error 400 si la imagen/fecha es inválida o hay error en predicción
+#     """
+#     # Validar que el usuario existe
+#     if not await validate_user_exists(input.user):
+#         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    try:
-        # Buscar entrada existente para el usuario y fecha
-        existing_entry = await DiaryEntryDoc.find_one(DiaryEntryDoc.user_id == input.user, DiaryEntryDoc.date == input.date)
-        if not existing_entry:
-            raise HTTPException(status_code=404, detail="No se encontró entrada para la fecha especificada")
+#     try:
+#         # Buscar entrada existente para el usuario y fecha
+#         existing_entry = await DiaryEntryDoc.find_one(DiaryEntryDoc.user_id == input.user, DiaryEntryDoc.date == input.date)
+#         if not existing_entry:
+#             raise HTTPException(status_code=404, detail="No se encontró entrada para la fecha especificada")
 
-        # Predecir etiqueta de la imagen
-        label = predict_image_label(input.img)
+#         # Predecir etiqueta de la imagen
+#         label = predict_image_label(input.img)
 
-        # Crear prompt para Gemini AI
-        prompt = """
-        Eres un acompañante emocional llamado Mr. Zorro
-        que genera recomendaciones diarias positivas y motivadoras.
-        Basándote en la emoción del usuario: {mood}, en su nota agregada: {note} y
-        en la etiqueta de la imagen que han guardado como recuerdo del día: {img},
-        crea una recomendación breve y alentadora, un dato curioso o especial para el día.
-        Tu respuesta debe ser en español y no debe exceder 100 palabras."""
+#         # Crear prompt para Gemini AI
+#         prompt = """
+#         Eres un acompañante emocional llamado Mr. Zorro
+#         que genera recomendaciones diarias positivas y motivadoras.
+#         Basándote en la emoción del usuario: {mood}, en su nota agregada: {note} y
+#         en la etiqueta de la imagen que han guardado como recuerdo del día: {img},
+#         crea una recomendación breve y alentadora, un dato curioso o especial para el día.
+#         Tu respuesta debe ser en español y no debe exceder 100 palabras."""
 
-        # Llenar el prompt con los datos del usuario
-        filled_prompt = prompt.format(mood=existing_entry.mood, note=existing_entry.note or "None", img=label or "None")
+#         # Llenar el prompt con los datos del usuario
+#         filled_prompt = prompt.format(mood=existing_entry.mood, note=existing_entry.note or "None", img=label or "None")
 
-        # Generar respuesta personalizada con IA
-        overview = prompt_gemini(filled_prompt, GeminiResponseModel)
+#         # Generar respuesta personalizada con IA
+#         overview = prompt_gemini(filled_prompt, GeminiResponseModel)
 
-        # Actualizar la entrada con nueva imagen y overview
-        await existing_entry.update({
-            "$set": {
-                "overview": overview.model_dump(),
-                "img": label
-            }
-        })
+#         # Actualizar la entrada con nueva imagen y overview
+#         await existing_entry.update({
+#             "$set": {
+#                 "overview": overview.model_dump(),
+#                 "img": label
+#             }
+#         })
 
-        return JSONResponse(content={"date": input.date, "predicted_label": label})
-    except Exception as e:
-        logger.error(f"Error de predicción: {e}")
-        raise HTTPException(status_code=400, detail="Imagen/fecha inválida o error en predicción")
+#         return JSONResponse(content={"date": input.date, "predicted_label": label})
+#     except Exception as e:
+#         logger.error(f"Error de predicción: {e}")
+#         raise HTTPException(status_code=400, detail="Imagen/fecha inválida o error en predicción")
 
 @app.post("/predict-image")
 async def predict_image_endpoint(input: ImagePrediction):

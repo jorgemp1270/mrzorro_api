@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class DiaryEntry(BaseModel):
     """Modelo para entrada de diario del usuario"""
     user: str  # ID único del usuario
+    date: str  # Fecha en formato YYYY-MM-DD
     mood: str  # Estado de ánimo del usuario
     title: str | None  # Título del día
     note: str | None  # Nota opcional del usuario
