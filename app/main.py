@@ -148,19 +148,30 @@ def predict_image_label(image_base64: str) -> str:
     Returns:
         str: Etiqueta predicha de la imagen
     """
-    # Decodificar imagen base64
-    image_data = base64.b64decode(image_base64)
-    image = Image.open(BytesIO(image_data)).convert("RGB")
+    try:
+        # Eliminar encabezado de data URI si existe (ej: data:image/jpeg;base64,...)
+        if "," in image_base64:
+            image_base64 = image_base64.split(",")[1]
 
-    # Preprocesar imagen
-    img_tensor = preprocess(image).unsqueeze(0)
+        # Decodificar imagen base64
+        image_data = base64.b64decode(image_base64)
+        image = Image.open(BytesIO(image_data)).convert("RGB")
 
-    # Realizar predicción
-    with torch.no_grad():
-        outputs = resnet50(img_tensor)
-        _, predicted = outputs.max(1)
-        label = idx_to_label[predicted.item()]
-        return label
+        # Preprocesar imagen
+        img_tensor = preprocess(image).unsqueeze(0)
+
+        # Realizar predicción
+        with torch.no_grad():
+            outputs = resnet50(img_tensor)
+            _, predicted = outputs.max(1)
+            label = idx_to_label[predicted.item()]
+            # Si la etiqueta es una lista (ej: ['tench', 'Tinca_tinca']), tomar el primer elemento
+            if isinstance(label, list):
+                label = label[1] # Usar el nombre común si está disponible
+            return str(label)
+    except Exception as e:
+        logger.error(f"Error en predicción de imagen: {e}")
+        return "imagen no identificada"
 
 # ============================================================================
 # CONFIGURACIÓN DE AUDIO
@@ -372,8 +383,11 @@ async def add_diary_entry(entry: DiaryEntry):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     # Procesar imagen si está presente
-    if entry.img is not None and entry.img != "":
-        entry.img = predict_image_label(entry.img)
+    predicted_label = ""
+    if entry.img and entry.img.strip():
+        logger.info(f"Analizando imagen para usuario {entry.user}...")
+        predicted_label = predict_image_label(entry.img)
+        logger.info(f"Imagen analizada: {predicted_label}")
 
     # Crear prompt para Gemini AI
     prompt = """
@@ -385,7 +399,7 @@ async def add_diary_entry(entry: DiaryEntry):
     Tu respuesta debe ser en español y no debe exceder 100 palabras."""
 
     # Llenar el prompt con los datos del usuario
-    filled_prompt = prompt.format(mood=entry.mood, note=entry.note or "None", img=entry.img or "None")
+    filled_prompt = prompt.format(mood=entry.mood, note=entry.note or "None", img=predicted_label or "None")
 
     # Generar respuesta personalizada con IA
     overview = prompt_gemini(filled_prompt, GeminiResponseModel)
@@ -401,7 +415,7 @@ async def add_diary_entry(entry: DiaryEntry):
         "mood": entry.mood,
         "title": entry.title,
         "note": entry.note,
-        "img": entry.img
+        "img": predicted_label
     }
 
     # Verificar si ya existe una entrada para la fecha actual y usuario, actualizar si es así
