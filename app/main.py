@@ -8,11 +8,14 @@ import logging
 import base64
 import json
 import os
+import wave
+import shutil
+import subprocess
 from io import BytesIO
 
 # Librerías de terceros - FastAPI
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 # Librerías de terceros - Base de datos
@@ -41,6 +44,8 @@ from .models import User, DiaryEntryDoc
 from PIL import Image
 import torch
 from torchvision import models, transforms
+import whisper
+from gtts import gTTS
 
 # Librerías de terceros - IA Generativa
 from google import genai
@@ -158,6 +163,15 @@ def predict_image_label(image_base64: str) -> str:
         return label
 
 # ============================================================================
+# CONFIGURACIÓN DE AUDIO
+# ============================================================================
+SAMPLE_RATE = 16000
+CHANNELS = 1
+SAMPLE_WIDTH = 2
+whisper_model = None
+active_recordings = {}
+
+# ============================================================================
 # CONFIGURACIÓN DE FASTAPI Y BASE DE DATOS
 # ============================================================================
 
@@ -167,9 +181,118 @@ app = FastAPI(media_type="application/json; charset=utf-8")
 # MongoDB database initialization on startup
 @app.on_event("startup")
 async def startup_event():
-    """Initialize MongoDB connection on application startup"""
+    """Initialize MongoDB connection and load ML models on application startup"""
     await init_database()
     logger.info("MongoDB connection initialized successfully")
+
+    global whisper_model
+    try:
+        logger.info("Loading Whisper model...")
+        whisper_model = whisper.load_model("base")
+        logger.info("Whisper model loaded successfully")
+    except Exception as e:
+        logger.error(f"Error loading Whisper model: {e}")
+
+# ============================================================================
+# FUNCIONES DE PROCESAMIENTO DE AUDIO
+# ============================================================================
+
+def convert_mp3_to_wav(mp3_path, wav_path):
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i", mp3_path,
+        "-ac", "1",
+        "-ar", "16000",
+        "-sample_fmt", "s16",
+        wav_path
+    ]
+    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+async def process_audio_with_ai(user_id: str):
+    try:
+        if user_id not in active_recordings or not active_recordings[user_id]['chunks']:
+            return JSONResponse(status_code=400, content={'status': 'error', 'message': 'No audio data'})
+
+        recordings_dir = os.path.join(BASE_DIR, 'recordings')
+        os.makedirs(recordings_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        input_filename = os.path.join(recordings_dir, f'input_{user_id}_{timestamp}.wav')
+
+        # Combine chunks
+        audio_data = b''.join(active_recordings[user_id]['chunks'])
+
+        # Save WAV
+        with wave.open(input_filename, 'wb') as wav_file:
+            wav_file.setnchannels(CHANNELS)
+            wav_file.setsampwidth(SAMPLE_WIDTH)
+            wav_file.setframerate(SAMPLE_RATE)
+            wav_file.writeframes(audio_data)
+
+        # Transcribe
+        if whisper_model is None:
+             return JSONResponse(status_code=500, content={'status': 'error', 'message': 'Whisper model not loaded'})
+
+        result = whisper_model.transcribe(input_filename, language='es')
+        user_text = result.get("text", "").strip()
+        if not user_text:
+            user_text = "No pude entender."
+
+        # Get Diary Context
+        today = datetime.date.today()
+        week_ago = today - datetime.timedelta(days=7)
+        # Assuming date is stored as YYYY-MM-DD string
+        entries = await DiaryEntryDoc.find(DiaryEntryDoc.user_id == user_id).to_list()
+
+        context_text = ""
+        for entry in entries:
+            try:
+                # Handle potential date format variations if necessary, assuming YYYY-MM-DD
+                entry_date = datetime.datetime.strptime(entry.date, "%Y-%m-%d").date()
+                if week_ago <= entry_date <= today:
+                    context_text += f"Date: {entry.date}, Title: {entry.title or 'No Title'}, Note: {entry.note or 'No Note'}, Mood: {entry.mood}\n"
+            except ValueError:
+                continue
+
+        # Call Gemini
+        prompt = f"""Contexto:
+          Entradas del diario del usuario de la última semana:\n{context_text}\n\n
+          El usuario dice: {user_text}\n\n
+          Responde en español de forma breve y comprensible como un acompañante emocional,
+          tu nombre es Mr. Zorro."""
+
+        try:
+            gemini_response = prompt_gemini(prompt, GeminiBaseResponse)
+            ai_response = gemini_response.response
+        except Exception as e:
+            logger.error(f"Gemini error: {e}")
+            ai_response = "Lo siento, tuve un problema al pensar mi respuesta."
+
+        # TTS
+        mp3_name = f"output_{user_id}_{timestamp}.mp3"
+        mp3_path = os.path.join(recordings_dir, mp3_name)
+        wav_name = f"output_{user_id}_{timestamp}.wav"
+        wav_path = os.path.join(recordings_dir, wav_name)
+
+        tts = gTTS(text=ai_response, lang='es', slow=False)
+        tts.save(mp3_path)
+
+        # Convert to WAV for ESP32
+        convert_mp3_to_wav(mp3_path, wav_path)
+
+        # Clear recording state
+        del active_recordings[user_id]
+
+        return JSONResponse(content={
+            'status': 'ok',
+            'user_text': user_text,
+            'ai_response': ai_response,
+            'filename': wav_name
+        })
+
+    except Exception as e:
+        logger.error(f"Error processing audio: {e}")
+        return JSONResponse(status_code=500, content={'status': 'error', 'message': str(e)})
 
 # ============================================================================
 # ENDPOINTS DE LA API
@@ -681,6 +804,95 @@ async def login_user(LoginInput: LoginInput):
     except Exception as e:
         logger.error(f"Error de inicio de sesión: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+# ============================================================================
+# ENDPOINTS DE ASISTENTE DE VOZ (EDWIN)
+# ============================================================================
+
+@app.post("/audio")
+async def receive_audio(
+    request: Request,
+    x_chunk_number: int = Header(alias="X-Chunk-Number", default=0),
+    x_last_chunk: str = Header(alias="X-Last-Chunk", default="false"),
+    x_user_id: str = Header(alias="X-User-Id", default=None)
+):
+    """
+    Recibe chunks de audio desde el ESP32, los procesa con Whisper y Gemini,
+    y retorna una respuesta de audio sintetizada.
+    """
+    if not x_user_id:
+        return JSONResponse(status_code=400, content={'status': 'error', 'message': 'X-User-Id header is required'})
+
+    try:
+        audio_data = await request.body()
+        is_last = x_last_chunk.lower() == 'true'
+
+        if x_chunk_number == 1:
+            active_recordings[x_user_id] = {
+                'chunks': [],
+                'total_bytes': 0,
+                'start_time': datetime.datetime.now()
+            }
+            logger.info(f"New recording started for user {x_user_id}")
+
+        if x_user_id not in active_recordings:
+             # Handle case where chunk 1 was missed or server restarted
+             if not is_last:
+                 active_recordings[x_user_id] = {
+                    'chunks': [],
+                    'total_bytes': 0,
+                    'start_time': datetime.datetime.now()
+                }
+             else:
+                 return JSONResponse(status_code=400, content={'status': 'error', 'message': 'No active recording found'})
+
+        if not is_last and len(audio_data) > 0:
+            active_recordings[x_user_id]['chunks'].append(audio_data)
+            active_recordings[x_user_id]['total_bytes'] += len(audio_data)
+            logger.info(f"User {x_user_id} Chunk {x_chunk_number}: {len(audio_data)} bytes")
+
+        if is_last:
+            logger.info(f"User {x_user_id} Last chunk received. Processing...")
+            return await process_audio_with_ai(x_user_id)
+
+        return JSONResponse(content={'status': 'ok', 'chunk': x_chunk_number})
+
+    except Exception as e:
+        logger.error(f"Error in /audio: {e}")
+        return JSONResponse(status_code=500, content={'status': 'error', 'message': str(e)})
+
+@app.get("/get_response/{filename}")
+async def get_response(filename: str):
+    """
+    Sirve el archivo de audio generado (WAV) para que el ESP32 lo reproduzca.
+    """
+    recordings_dir = os.path.join(BASE_DIR, 'recordings')
+    filepath = os.path.join(recordings_dir, filename)
+
+    if os.path.exists(filepath):
+        return FileResponse(filepath, media_type='audio/wav')
+
+    raise HTTPException(status_code=404, detail="File not found")
+
+@app.get("/last_response")
+async def last_response():
+    """
+    Retorna el nombre del último archivo de respuesta generado.
+    """
+    recordings_dir = os.path.join(BASE_DIR, 'recordings')
+    if not os.path.exists(recordings_dir):
+         raise HTTPException(status_code=404, detail="No recordings found")
+
+    files = [f for f in os.listdir(recordings_dir) if f.startswith('output_') and f.endswith('.wav')]
+
+    if not files:
+        raise HTTPException(status_code=404, detail="No responses found")
+
+    files.sort(key=lambda x: os.path.getmtime(os.path.join(recordings_dir, x)), reverse=True)
+    latest = files[0]
+
+    return JSONResponse(content={'status': 'ok', 'filename': latest})
+
 # ============================================================================
 # PUNTO DE ENTRADA DE LA APLICACIÓN
 # ============================================================================

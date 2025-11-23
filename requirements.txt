@@ -20,6 +20,10 @@ google-genai
 # Configuración y utilidades
 python-dotenv==1.0.1
 
+# Audio processing
+openai-whisper
+gTTS
+
 # Dependencias adicionales para desarrollo (opcional)
 # pytest==8.3.3
 # httpx==0.27.2

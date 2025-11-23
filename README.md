@@ -8,6 +8,7 @@ Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro.
 - **Sistema de Puntos**: Recompensas por actividades del diario (5 puntos por entrada)
 - **Procesamiento de imágenes**: Clasificación automática usando ResNet-50 pre-entrenado (CPU-optimizado)
 - **IA Generativa**: Integración con Google Gemini AI para recomendaciones personalizadas
+- **Asistente de Voz**: Procesamiento de audio con Whisper (STT) y gTTS (TTS) para interacción por voz
 - **Base de datos MongoDB**: Almacenamiento escalable con Beanie ODM
 - **API RESTful**: Endpoints completos para gestión de diario con autenticación
 - **Sistema de Streak**: Seguimiento de días consecutivos de login
@@ -25,6 +26,7 @@ Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro.
 - Python 3.11+
 - MongoDB (local o remoto)
 - Google Gemini API Key
+- FFmpeg (requerido para procesamiento de audio)
 
 ## 🚀 Instalación y Ejecución
 
@@ -245,6 +247,46 @@ backend/
 - **URL**: `/prompt`
 - **Método**: `POST`
 - **Descripción**: Genera respuesta usando Gemini AI basada en prompt y entradas de la semana
+
+### 🎤 Asistente de Voz
+
+#### 10. Enviar audio (Chunks)
+- **URL**: `/audio`
+- **Método**: `POST`
+- **Descripción**: Recibe chunks de audio desde el ESP32, los procesa y retorna una respuesta de audio.
+- **Headers**:
+  - `X-Chunk-Number`: Número de secuencia del chunk (int)
+  - `X-Last-Chunk`: "true" si es el último chunk, "false" si no (string)
+  - `X-User-Id`: ID del usuario (string)
+- **Body**: Datos binarios del audio (raw bytes)
+- **Respuesta (Chunk intermedio)**:
+```json
+{
+    "status": "ok",
+    "chunk": 1
+}
+```
+- **Respuesta (Último chunk - Procesamiento completo)**:
+```json
+{
+    "status": "ok",
+    "user_text": "Texto transcrito del usuario",
+    "ai_response": "Respuesta de texto de Gemini",
+    "filename": "output_user123_20251122_120000.wav"
+}
+```
+
+#### 11. Obtener archivo de respuesta
+- **URL**: `/get_response/{filename}`
+- **Método**: `GET`
+- **Descripción**: Descarga el archivo de audio generado (WAV) para reproducción.
+- **Parámetros**:
+  - `filename`: Nombre del archivo retornado por `/audio`
+
+#### 12. Obtener última respuesta
+- **URL**: `/last_response`
+- **Método**: `GET`
+- **Descripción**: Obtiene el nombre del último archivo de audio generado.
 
 ## 🛠️ Gestión y Monitoreo
 
@@ -528,12 +570,18 @@ La API utiliza Google Gemini AI para generar:
 - Las etiquetas predichas se integran en las recomendaciones de IA
 - Procesa imágenes en formato base64
 
+### **Procesamiento de Voz**
+- **Whisper (OpenAI)**: Modelo "base" para transcripción de voz a texto (STT) en español.
+- **gTTS (Google Text-to-Speech)**: Síntesis de voz para generar respuestas audibles.
+- **FFmpeg**: Conversión de formatos de audio para compatibilidad con ESP32.
+
 ## 🔧 Desarrollo
 
 ### **Stack Tecnológico**
 - **Backend**: FastAPI (Python 3.11+)
 - **Base de Datos**: MongoDB con Beanie ODM
-- **IA**: Google Gemini AI + PyTorch (ResNet-50)
+- **IA**: Google Gemini AI + PyTorch (ResNet-50) + Whisper
+- **Audio**: gTTS + FFmpeg
 - **Containerización**: Docker + Docker Compose
 - **Image Processing**: Pillow + Torchvision
 

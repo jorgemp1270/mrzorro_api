@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir \
 # Runtime stage
 FROM python:3.11-slim
 
+# Install system dependencies (ffmpeg)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy installed packages from builder
