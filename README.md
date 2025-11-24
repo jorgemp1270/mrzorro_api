@@ -122,9 +122,6 @@ backend/
 │       └── imagenet_class_index.json
 ├── scripts/
 │   └── migrate_data.py  # Script de migración de datos TinyDB → MongoDB
-├── db/                  # Datos legacy de TinyDB (para migración)
-│   ├── db.json
-│   └── users.json
 ├── .env                 # Variables de entorno (no versionado)
 ├── .dockerignore        # Archivos excluidos del contexto Docker
 ├── Dockerfile           # Configuración de imagen Docker
@@ -248,6 +245,34 @@ backend/
 - **Método**: `POST`
 - **Descripción**: Genera respuesta usando Gemini AI basada en prompt y entradas de la semana
 
+### 🛍️ Tienda y Puntos
+
+#### 9. Realizar compra
+- **URL**: `/make-purchase`
+- **Método**: `POST`
+- **Descripción**: Procesa una compra de tema o fuente usando los puntos del usuario.
+- **Cuerpo de la petición**:
+```json
+{
+    "user": "user_20251117203959_8322",
+    "price": "50",
+    "theme": "dark_mode"
+}
+```
+- **Campos**:
+  - `user` (string, requerido): ID único del usuario
+  - `price` (string o int, requerido): Costo del ítem en puntos
+  - `theme` (string, opcional): Identificador del tema comprado
+  - `font` (string, opcional): Identificador de la fuente comprada
+  - *Nota*: Se debe especificar `theme` O `font`, pero no ambos.
+- **Respuesta exitosa**:
+```json
+{
+    "message": "Compra exitosa",
+    "remaining_points": 150
+}
+```
+
 ### 🎤 Asistente de Voz
 
 #### 10. Enviar audio (Chunks)
@@ -257,7 +282,7 @@ backend/
 - **Headers**:
   - `X-Chunk-Number`: Número de secuencia del chunk (int)
   - `X-Last-Chunk`: "true" si es el último chunk, "false" si no (string)
-  - `X-User-Id`: ID del usuario (string)
+  - `X-User-Id`: ID del usuario (string, **REQUERIDO**)
 - **Body**: Datos binarios del audio (raw bytes)
 - **Respuesta (Chunk intermedio)**:
 ```json
@@ -504,42 +529,7 @@ python scripts/migrate_data.py
 }
 ```
 
-## 🤖 Integración con IA
-
-### Google Gemini AI (gemini-2.5-flash)
-La API utiliza Google Gemini AI para generar:
-- **Mensajes motivadores personalizados** basados en el estado de ánimo
-- **Recomendaciones diarias** adaptadas al contexto del usuario
-- **Datos curiosos** relacionados con las actividades del día
-- **Respuestas a prompts personalizados** analizando las entradas de la semana
-
-### ResNet-50 para Clasificación de Imágenes
-- Modelo pre-entrenado en ImageNet con 1000 clases
-- Clasifica imágenes automáticamente cuando se suben al diario
-- Las etiquetas predichas se integran en las recomendaciones de IA
-- Procesa imágenes en formato base64
-
 ## 📊 Base de Datos
-
-La aplicación utiliza TinyDB, una base de datos JSON ligera con dos archivos principales:
-
-### **users.json**
-- **Usuarios registrados** con credenciales, streak y sistema de puntos
-- **Campos**: `user` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`, `points`
-- **Sistema de Streak**: Seguimiento automático de días consecutivos de login
-- **Sistema de Puntos**: Acumulación de puntos por actividades (5 puntos por entrada de diario)
-
-### **db.json**
-- **Entradas diarias** filtradas por usuario con fecha como identificador
-- **Estados de ánimo, notas y títulos** del usuario
-- **Etiquetas de imágenes** procesadas por ResNet-50
-- **Respuestas generadas por IA** (overview con mensaje, recomendación y dato curioso)
-- Los datos se almacenan por usuario y se actualizan automáticamente si ya existe una entrada para la fecha actual
-
-## 🔐 Sistema de Autenticación
-
-### **Validación de Usuario**
-## 📊 Base de Datos MongoDB
 
 La aplicación utiliza MongoDB como base de datos principal con las siguientes colecciones:
 
@@ -554,6 +544,10 @@ La aplicación utiliza MongoDB como base de datos principal con las siguientes c
 - **Etiquetas de imágenes** procesadas por ResNet-50
 - **Respuestas generadas por IA** (overview con mensaje, recomendación y dato curioso)
 - **Indexes**: `user_id + date` (compuesto único), `user_id`, `date`
+
+<p align="center">
+  <img src=".resources/img/mrzorro_db.png" width="80%" />
+</p>
 
 ## 🤖 Integración con IA
 
