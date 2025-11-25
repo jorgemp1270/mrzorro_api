@@ -1,4 +1,4 @@
-# API Mr. Zorro
+# 🦊 Mr. Zorro - Backend API
 
 Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro. Esta API funciona como un acompañante emocional que procesa entradas de diario, analiza imágenes usando IA y genera recomendaciones personalizadas con sistema de autenticación y streak de usuarios.
 
