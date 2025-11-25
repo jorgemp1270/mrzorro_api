@@ -2,6 +2,13 @@
 
 Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro. Esta API funciona como un acompañante emocional que procesa entradas de diario, analiza imágenes usando IA y genera recomendaciones personalizadas con sistema de autenticación y streak de usuarios.
 
+## 🔗 Repositorios
+
+Este proyecto es parte de un ecosistema más grande. Revisa los otros repositorios de sus componentes:
+
+- **Flutter App**: [mrzorro_app](https://github.com/jorgemp1270/mrzorro_app)
+- **Embedded Device (ESP32)**: [mrzorro_esp32](https://github.com/jorgemp1270/mrzorro_esp32)
+
 ## 🚀 Características
 
 - **Sistema de Usuarios**: Registro, login y gestión de streak diario
