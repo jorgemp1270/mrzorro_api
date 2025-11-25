@@ -267,10 +267,13 @@ async def process_audio_with_ai(user_id: str):
 
         # Call Gemini
         prompt = f"""Contexto:
-          Entradas del diario del usuario de la última semana:\n{context_text}\n\n
-          El usuario dice: {user_text}\n\n
-          Responde en español de forma breve y comprensible como un acompañante emocional,
-          tu nombre es Mr. Zorro."""
+          Eres un acompañante emocional llamado Mr. Zorro.
+          Basándote en las siguientes entradas del diario del usuario
+          de la última semana:\n{context_text}\n\n y en base a lo
+          que dice el usuario a continuación:
+          \n{user_text}\n\n
+          Responde en español en menos de 50 palabras de forma comprensible
+          como un acompañante emocional, positivo y motivador."""
 
         try:
             gemini_response = prompt_gemini(prompt, GeminiBaseResponse)
