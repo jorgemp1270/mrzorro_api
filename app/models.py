@@ -6,7 +6,7 @@ Using Beanie ODM for async MongoDB operations
 from datetime import datetime
 from typing import Optional
 from beanie import Document
-from pydantic import Field
+from pydantic import Field, BaseModel
 from bson import ObjectId
 
 
@@ -41,3 +41,17 @@ class DiaryEntryDoc(Document):
 
     class Settings:
         name = "diary_entries"
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" or "model"
+    content: str
+
+
+class ChatSession(Document):
+    user_id: str
+    history: list[ChatMessage] = []
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "chat_sessions"

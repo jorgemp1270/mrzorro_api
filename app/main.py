@@ -38,7 +38,7 @@ from .schemas import (
 
 # MongoDB models and database
 from .database import init_database
-from .models import User, DiaryEntryDoc
+from .models import User, DiaryEntryDoc, ChatSession, ChatMessage
 
 # Librerías de terceros - Procesamiento de imágenes y ML
 from PIL import Image
@@ -73,24 +73,36 @@ logger = logging.getLogger(__name__)
 # FUNCIONES DE IA GENERATIVA
 # ============================================================================
 
-def prompt_gemini(prompt: str, model: BaseModel) -> str:
+def prompt_gemini(prompt: str, model: BaseModel, history: list = None, system_instruction: str = None) -> str:
     """
     Envía un prompt a Gemini AI y retorna una respuesta estructurada.
 
     Args:
         prompt (str): El texto del prompt a enviar
         model (BaseModel): Modelo Pydantic para estructurar la respuesta
+        history (list): Historial de chat
+        system_instruction (str): Instrucción del sistema
 
     Returns:
         str: Respuesta validada según el modelo especificado
     """
+    contents = []
+    if history:
+        # Convertir historial al formato de Gemini
+        for msg in history:
+            contents.append({"role": msg.role, "parts": [{"text": msg.content}]})
+
+    # Agregar el mensaje actual del usuario
+    contents.append({"role": "user", "parts": [{"text": prompt}]})
+
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=prompt,
+        contents=contents,
         config={
             "temperature": 1.0,
             "response_mime_type": "application/json",
-            "response_json_schema": model.model_json_schema()
+            "response_json_schema": model.model_json_schema(),
+            "system_instruction": system_instruction
         }
     )
     model_response = model.model_validate_json(response.text)
@@ -247,7 +259,7 @@ async def process_audio_with_ai(user_id: str):
         result = whisper_model.transcribe(input_filename, language='es')
         user_text = result.get("text", "").strip()
         if not user_text:
-            user_text = "No pude entender."
+            user_text = "Audio del usuario no reconocido."
 
         # Get Diary Context
         today = datetime.date.today()
@@ -265,19 +277,36 @@ async def process_audio_with_ai(user_id: str):
             except ValueError:
                 continue
 
+        # Get Chat History
+        chat_session = await ChatSession.find_one(ChatSession.user_id == user_id)
+        if not chat_session:
+            chat_session = ChatSession(user_id=user_id)
+            await chat_session.insert()
+
         # Call Gemini
-        prompt = f"""Contexto:
+        system_instruction = f"""
           Eres un acompañante emocional llamado Mr. Zorro.
           Basándote en las siguientes entradas del diario del usuario
-          de la última semana:\n{context_text}\n\n y en base a lo
-          que dice el usuario a continuación:
-          \n{user_text}\n\n
+          de la última semana:\n{context_text}\n\n
           Responde en español en menos de 50 palabras de forma comprensible
-          como un acompañante emocional, positivo y motivador."""
+          como un acompañante emocional, positivo y motivador.
+        """
 
         try:
-            gemini_response = prompt_gemini(prompt, GeminiBaseResponse)
+            gemini_response = prompt_gemini(
+                prompt=user_text,
+                model=GeminiBaseResponse,
+                history=chat_session.history,
+                system_instruction=system_instruction
+            )
             ai_response = gemini_response.response
+
+            # Update History
+            chat_session.history.append(ChatMessage(role="user", content=user_text))
+            chat_session.history.append(ChatMessage(role="model", content=ai_response))
+            chat_session.updated_at = datetime.datetime.utcnow()
+            await chat_session.save()
+
         except Exception as e:
             logger.error(f"Gemini error: {e}")
             ai_response = "Lo siento, tuve un problema al pensar mi respuesta."
@@ -594,18 +623,39 @@ async def generate_prompt_response(prompt: PromptInput):
             if entry.date and datetime.date.fromisoformat(entry.date) >= start_of_week
         ]
 
-        structured_prompt = """
+        # Get Chat History
+        chat_session = await ChatSession.find_one(ChatSession.user_id == prompt.user)
+        if not chat_session:
+            chat_session = ChatSession(user_id=prompt.user)
+            await chat_session.insert()
+
+        system_instruction = """
         Eres un acompañante emocional llamado Mr. Zorro
         que genera respuestas motivadoras y positivas.
         Basándote en el siguiente prompt del usuario y las entradas a su diario,
         genera una respuesta breve y alentadora. Las entradas del diario están en formato JSON,
         corresponden a la semana actual
         y contienen el estado de ánimo, nota e imagen etiquetada del usuario.
+        Si consideras que el usuario podría estar en una crisis emocional,
+        que podría atentar contra su vida,
+        incluye en el campo 'crisis_alert' un valor true en la respuesta.
         Tu respuesta debe ser en español y no debe exceder 100 palabras.
-        Usuario: {user_prompt}
         Entradas del diario: {diary_entries}
-        """.format(user_prompt=prompt.prompt, diary_entries=json.dumps(diary_entries, ensure_ascii=False))
-        response = prompt_gemini(structured_prompt, GeminiBaseResponse)
+        """.format(diary_entries=json.dumps(diary_entries, ensure_ascii=False))
+
+        response = prompt_gemini(
+            prompt=prompt.prompt,
+            model=GeminiBaseResponse,
+            history=chat_session.history,
+            system_instruction=system_instruction
+        )
+
+        # Update History
+        chat_session.history.append(ChatMessage(role="user", content=prompt.prompt))
+        chat_session.history.append(ChatMessage(role="model", content=response.response))
+        chat_session.updated_at = datetime.datetime.utcnow()
+        await chat_session.save()
+
         return JSONResponse(content=response.model_dump())
     except Exception as e:
         logger.error(f"Error de predicción: {e}")

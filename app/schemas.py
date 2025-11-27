@@ -25,6 +25,7 @@ class GeminiResponseModel(BaseModel):
 class GeminiBaseResponse(BaseModel):
     """Modelo base para respuesta de Gemini AI"""
     response: str = Field(description="Mensaje motivador general")
+    crisis_alert: bool = Field(description="Indicador de alerta de crisis")
 
 
 class ImageInput(BaseModel):
