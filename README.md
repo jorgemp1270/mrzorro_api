@@ -19,9 +19,12 @@ Este proyecto es parte de un ecosistema más grande. Revisa los otros repositori
 - **Sistema de Puntos**: Recompensas por actividades del diario (5 puntos por entrada)
 - **Procesamiento de imágenes**: Clasificación automática usando ResNet-50 pre-entrenado (CPU-optimizado)
 - **IA Generativa**: Integración con Google Gemini AI para recomendaciones personalizadas
+- **Memoria de Contexto**: Historial de chat persistente para conversaciones coherentes con Mr. Zorro
+- **Personalización**: Configuración de perfil de usuario (edad, personalidad, consideraciones) para adaptar las respuestas de la IA
+- **Sistema de Seguridad**: Detección automática de palabras clave de crisis con respuestas de seguridad inmediatas
 - **Asistente de Voz**: Procesamiento de audio con Whisper (STT) y gTTS (TTS) para interacción por voz
 - **Base de datos MongoDB**: Almacenamiento escalable con Beanie ODM
-- **API RESTful**: Endpoints completos para gestión de diario con autenticación
+- **API RESTful**: Endpoints completos para gestión de diario, configuración y contexto
 - **Sistema de Streak**: Seguimiento de días consecutivos de login
 - **Containerización**: Despliegue con Docker y Docker Compose
 
@@ -323,6 +326,35 @@ backend/
 - **URL**: `/last_response`
 - **Método**: `GET`
 - **Descripción**: Obtiene el nombre del último archivo de audio generado.
+
+### ⚙️ Configuración y Contexto
+
+#### 13. Actualizar Configuración de Usuario
+- **URL**: `/settings`
+- **Método**: `POST`
+- **Descripción**: Actualiza las preferencias del usuario para personalizar la interacción con la IA.
+- **Body**:
+```json
+{
+  "user": "user_id_123",
+  "settings": {
+    "age": "adult",
+    "personality": "friendly",
+    "considerations": "Prefer short answers",
+    "about_me": "I like hiking"
+  }
+}
+```
+
+#### 14. Obtener Configuración de Usuario
+- **URL**: `/settings/{user_id}`
+- **Método**: `GET`
+- **Descripción**: Obtiene la configuración actual del usuario.
+
+#### 15. Eliminar Contexto de Chat
+- **URL**: `/context/{user_id}`
+- **Método**: `DELETE`
+- **Descripción**: Elimina el historial de conversación (memoria) del usuario con el asistente.
 
 ## 🛠️ Gestión y Monitoreo
 
