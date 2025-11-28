@@ -14,7 +14,6 @@ class Therapist(Document):
     therapist_id: str = Field(..., unique=True)
     name: str
     email: str = Field(..., unique=True)
-    password: str
     address: Optional[str] = None
     phone: Optional[str] = None
     specialization: Optional[str] = None
@@ -31,6 +30,10 @@ class UserSettings(BaseModel):
     considerations: Optional[str] = ""
     about_me: Optional[str] = ""
 
+class Contact(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
 
 class User(Document):
     """MongoDB document model for users"""
@@ -42,6 +45,8 @@ class User(Document):
     streak: int = 1
     best_streak: int = 1
     points: int = 0
+    contacts: Optional[list[Contact]] = []
+    danger_level: int = 0
     themes: Optional[list[str]] = []
     fonts: Optional[list[str]] = []
     settings: Optional[UserSettings] = {}

@@ -73,3 +73,9 @@ class UpdateSettingsRequest(BaseModel):
     """Modelo para solicitud de actualización de configuración"""
     user: str
     settings: UserSettings
+
+class ContactInput(BaseModel):
+    """Modelo para agregar/eliminar contacto"""
+    user_id: str
+    name: str
+    phone: str

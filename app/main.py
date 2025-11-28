@@ -35,12 +35,13 @@ from .schemas import (
     PromptInput,
     SignupInput,
     UserSettings,
-    UpdateSettingsRequest
+    UpdateSettingsRequest,
+    ContactInput
 )
 
 # MongoDB models and database
 from .database import init_database
-from .models import User, DiaryEntryDoc, ChatSession, ChatMessage
+from .models import User, DiaryEntryDoc, ChatSession, ChatMessage, Contact
 
 # Librerías de terceros - Procesamiento de imágenes y ML
 from PIL import Image
@@ -304,10 +305,17 @@ async def process_audio_with_ai(user_id: str):
           Eres un acompañante emocional llamado Mr. Zorro.
 
           Perfil del usuario:
-          - Grupo de edad: {settings.age}
-          - Personalidad preferida del asistente: {settings.personality}
-          - Sobre el usuario: {settings.about_me or 'No especificado'}
-          - Consideraciones especiales: {settings.considerations or 'Ninguna'}
+          - Grupo de edad: {settings.age} (toma en cuenta esta información
+          para adaptar tu lenguaje y recomendaciones; sé estricto
+          con esta característica).
+          - Personalidad preferida del asistente: {settings.personality} (cambia
+          tu forma de hablar y tono acorde a esta personalidad).
+          - Sobre el usuario: {settings.about_me or 'No especificado'} (breve descripción
+          que el usuario ha proporcionado de sí mismo).
+          - Consideraciones especiales: {settings.considerations or 'Ninguna'} (consideraciones
+          que debes tener en cuenta al interactuar con el usuario, como temas a evitar, cosas
+          qué hacer o no hacer. Sólo toma en cuenta estas consideraciones si son adecuadas
+          para el rango de edad mencionado anteriormente).
 
           Basándote en las siguientes entradas del diario del usuario
           de la última semana:\n{context_text}\n\n
@@ -324,6 +332,12 @@ async def process_audio_with_ai(user_id: str):
                 system_instruction=system_instruction
             )
             ai_response = gemini_response.response
+
+            # Check for crisis alert
+            if gemini_response.crisis_alert:
+                user.danger_level += 1
+                await user.save()
+                logger.warning(f"Crisis alert detected for user {user_id}. Danger level increased to {user.danger_level}")
 
             # Update History
             chat_session.history.append(ChatMessage(role="user", content=user_text))
@@ -454,10 +468,17 @@ async def add_diary_entry(entry: DiaryEntry):
     que genera recomendaciones diarias positivas y motivadoras.
 
     Perfil del usuario:
-    - Grupo de edad: {age}
-    - Personalidad preferida del asistente: {personality}
-    - Sobre el usuario: {about_me}
-    - Consideraciones especiales: {considerations}
+    - Grupo de edad: {age} (toma en cuenta esta información
+    para adaptar tu lenguaje y recomendaciones; sé estricto
+    con esta característica).
+    - Personalidad preferida del asistente: {personality} (cambia
+    tu forma de hablar y tono acorde a esta personalidad).
+    - Sobre el usuario: {about_me} (breve descripción
+          que el usuario ha proporcionado de sí mismo).
+    - Consideraciones especiales: {considerations} (consideraciones
+          que debes tener en cuenta al interactuar con el usuario, como temas a evitar, cosas
+          qué hacer o no hacer. Sólo toma en cuenta estas consideraciones si son adecuadas
+          para el rango de edad mencionado anteriormente).
 
     Basándote en la emoción del usuario: {mood}, en su nota agregada: {note} y
     en la etiqueta de la imagen que han guardado como recuerdo del día: {img},
@@ -616,10 +637,17 @@ async def predict_image_endpoint(input: ImagePrediction):
         Estas ayudando a un usuario a describir la imagen que ha subido a su diario.
 
         Perfil del usuario:
-        - Grupo de edad: {age}
-        - Personalidad preferida del asistente: {personality}
-        - Sobre el usuario: {about_me}
-        - Consideraciones especiales: {considerations}
+        - Grupo de edad: {age} (toma en cuenta esta información
+        para adaptar tu lenguaje y recomendaciones; sé estricto
+        con esta característica).
+        - Personalidad preferida del asistente: {personality} (cambia
+        tu forma de hablar y tono acorde a esta personalidad)
+        - Sobre el usuario: {about_me} (breve descripción
+          que el usuario ha proporcionado de sí mismo).
+        - Consideraciones especiales: {considerations} (consideraciones
+          que debes tener en cuenta al interactuar con el usuario, como temas a evitar, cosas
+          qué hacer o no hacer. Sólo toma en cuenta estas consideraciones si son adecuadas
+          para el rango de edad mencionado anteriormente).
 
         Basándote en la etiqueta reconocida por ResNet-50: {img},
         crea una breve descripción positiva y motivadora relacionada con esa imagen.
@@ -700,10 +728,17 @@ async def generate_prompt_response(prompt: PromptInput):
         que genera respuestas motivadoras y positivas.
 
         Perfil del usuario:
-        - Grupo de edad: {age}
-        - Personalidad preferida del asistente: {personality}
-        - Sobre el usuario: {about_me}
-        - Consideraciones especiales: {considerations}
+        - Grupo de edad: {age} (toma en cuenta esta información
+        para adaptar tu lenguaje y recomendaciones; sé estricto
+        con esta característica).
+        - Personalidad preferida del asistente: {personality} (cambia
+        tu forma de hablar y tono acorde a esta personalidad).
+        - Sobre el usuario: {about_me} (breve descripción
+          que el usuario ha proporcionado de sí mismo).
+        - Consideraciones especiales: {considerations} (consideraciones
+          que debes tener en cuenta al interactuar con el usuario, como temas a evitar, cosas
+          qué hacer o no hacer. Sólo toma en cuenta estas consideraciones si son adecuadas
+          para el rango de edad mencionado anteriormente).
 
         Basándote en el siguiente prompt del usuario y las entradas a su diario,
         genera una respuesta breve y alentadora. Las entradas del diario están en formato JSON,
@@ -731,6 +766,12 @@ async def generate_prompt_response(prompt: PromptInput):
             history=chat_session.history,
             system_instruction=system_instruction
         )
+
+        # Check for crisis alert
+        if response.crisis_alert:
+            user.danger_level += 1
+            await user.save()
+            logger.warning(f"Crisis alert detected for user {prompt.user}. Danger level increased to {user.danger_level}")
 
         # Update History
         chat_session.history.append(ChatMessage(role="user", content=prompt.prompt))
@@ -875,6 +916,8 @@ async def get_user_settings(user_id: str):
     except Exception as e:
         logger.error(f"Error obteniendo configuración: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+
 
 @app.post("/signup")
 async def signup_user(SignupInput: SignupInput):
@@ -1097,6 +1140,121 @@ async def delete_context(user_id: str):
         logger.error(f"Error eliminando contexto: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
+# ============================================================================
+# ENDPOINTS DE CONTACTOS
+# ============================================================================
+
+@app.post("/contacts")
+async def add_contact(contact_input: ContactInput):
+    """
+    Agrega un nuevo contacto al usuario si no existe ya.
+    """
+    try:
+        user = await User.find_one(User.user_id == contact_input.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Inicializar lista si es None
+        if user.contacts is None:
+            user.contacts = []
+
+        # Verificar duplicados (por teléfono)
+        for c in user.contacts:
+            if c.phone == contact_input.phone:
+                return JSONResponse(content={"message": "El contacto ya existe"}, status_code=400)
+
+        new_contact = Contact(name=contact_input.name, phone=contact_input.phone)
+        user.contacts.append(new_contact)
+        await user.save()
+
+        return JSONResponse(content={"message": "Contacto agregado exitosamente"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error agregando contacto: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.get("/contacts/{user_id}")
+async def get_contacts(user_id: str):
+    """
+    Obtiene todos los contactos del usuario.
+    """
+    try:
+        user = await User.find_one(User.user_id == user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        return JSONResponse(content=[c.model_dump() for c in (user.contacts or [])])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo contactos: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.delete("/contacts")
+async def delete_contact(contact_input: ContactInput):
+    """
+    Elimina un contacto del usuario.
+    """
+    try:
+        user = await User.find_one(User.user_id == contact_input.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        if not user.contacts:
+             return JSONResponse(content={"message": "Contacto no encontrado"}, status_code=404)
+
+        # Filtrar el contacto a eliminar
+        original_count = len(user.contacts)
+        user.contacts = [c for c in user.contacts if c.phone != contact_input.phone]
+
+        if len(user.contacts) == original_count:
+            return JSONResponse(content={"message": "Contacto no encontrado"}, status_code=404)
+
+        await user.save()
+        return JSONResponse(content={"message": "Contacto eliminado exitosamente"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error eliminando contacto: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.get("/danger-level/{user_id}")
+async def get_user_danger_level(user_id: str):
+    """
+    Obtiene el nivel de peligro actual del usuario.
+    """
+    try:
+        user = await User.find_one(User.user_id == user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        return JSONResponse(content={"danger_level": user.danger_level})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo nivel de peligro: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.post("/reset-danger-level/{user_id}")
+async def reset_user_danger_level(user_id: str):
+    """
+    Resetea el nivel de peligro del usuario a 0.
+    """
+    try:
+        user = await User.find_one(User.user_id == user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        user.danger_level = 0
+        await user.save()
+
+        return JSONResponse(content={"message": "Nivel de peligro reseteado exitosamente", "danger_level": 0})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reseteando nivel de peligro: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 # ============================================================================
 # PUNTO DE ENTRADA DE LA APLICACIÓN
 # ============================================================================
