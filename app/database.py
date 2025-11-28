@@ -5,7 +5,7 @@ Database connection and initialization for MongoDB
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from .models import User, DiaryEntryDoc, ChatSession
+from .models import Therapist, User, DiaryEntryDoc, ChatSession
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ async def init_database():
         database = client[DATABASE_NAME]
 
         # Initialize beanie with document models
-        await init_beanie(database=database, document_models=[User, DiaryEntryDoc, ChatSession])
+        await init_beanie(database=database, document_models=[Therapist, User, DiaryEntryDoc, ChatSession])
 
         logger.info("Successfully connected to MongoDB and initialized Beanie")
         return database

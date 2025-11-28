@@ -51,6 +51,12 @@ class PurchaseInput(BaseModel):
     theme: str | None = None  # Tema comprado
     font: str | None = None   # Fuente comprada
 
+class UserSettings(BaseModel):
+    age: str = "kids"
+    personality: str = "default"
+    considerations: str | None = None
+    about_me: str | None = None
+
 class LoginInput(BaseModel):
     """Modelo para entrada de login"""
     email: str  # Nombre de usuario
@@ -61,3 +67,8 @@ class SignupInput(BaseModel):
     email: str  # Nombre de usuario
     password: str  # Contraseña
     nickname: str  # Apodo del usuario
+
+class UpdateSettingsRequest(BaseModel):
+    """Modelo para solicitud de actualización de configuración"""
+    user: str
+    settings: UserSettings

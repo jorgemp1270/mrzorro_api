@@ -9,6 +9,28 @@ from beanie import Document
 from pydantic import Field, BaseModel
 from bson import ObjectId
 
+class Therapist(Document):
+    """MongoDB document model for therapists"""
+    therapist_id: str = Field(..., unique=True)
+    name: str
+    email: str = Field(..., unique=True)
+    password: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    specialization: Optional[str] = None
+    profile_img: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "therapists"
+
+
+class UserSettings(BaseModel):
+    age: str = "kids"
+    personality: str = "default"
+    considerations: Optional[str] = ""
+    about_me: Optional[str] = ""
+
 
 class User(Document):
     """MongoDB document model for users"""
@@ -22,6 +44,7 @@ class User(Document):
     points: int = 0
     themes: Optional[list[str]] = []
     fonts: Optional[list[str]] = []
+    settings: Optional[UserSettings] = {}
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

@@ -33,7 +33,9 @@ from .schemas import (
     PurchaseInput,
     LoginInput,
     PromptInput,
-    SignupInput
+    SignupInput,
+    UserSettings,
+    UpdateSettingsRequest
 )
 
 # MongoDB models and database
@@ -256,7 +258,8 @@ async def process_audio_with_ai(user_id: str):
         if whisper_model is None:
              return JSONResponse(status_code=500, content={'status': 'error', 'message': 'Whisper model not loaded'})
 
-        result = whisper_model.transcribe(input_filename, language='es')
+        result = whisper_model.transcribe(input_filename, language='es', fp16=False)
+        logger.info("Transcription result: %s", result)
         user_text = result.get("text", "").strip()
         if not user_text:
             user_text = "Audio del usuario no reconocido."
@@ -283,13 +286,25 @@ async def process_audio_with_ai(user_id: str):
             chat_session = ChatSession(user_id=user_id)
             await chat_session.insert()
 
+        # Get User Settings
+        user = await User.find_one(User.user_id == user_id)
+        settings = user.settings if user and user.settings else UserSettings()
+
         # Call Gemini
         system_instruction = f"""
           Eres un acompañante emocional llamado Mr. Zorro.
+
+          Perfil del usuario:
+          - Grupo de edad: {settings.age}
+          - Personalidad preferida del asistente: {settings.personality}
+          - Sobre el usuario: {settings.about_me or 'No especificado'}
+          - Consideraciones especiales: {settings.considerations or 'Ninguna'}
+
           Basándote en las siguientes entradas del diario del usuario
           de la última semana:\n{context_text}\n\n
           Responde en español en menos de 50 palabras de forma comprensible
           como un acompañante emocional, positivo y motivador.
+          Adapta tu respuesta al perfil del usuario descrito anteriormente.
         """
 
         try:
@@ -326,11 +341,10 @@ async def process_audio_with_ai(user_id: str):
         # Clear recording state
         del active_recordings[user_id]
 
-        return JSONResponse(content={
-            'status': 'ok',
-            'user_text': user_text,
-            'ai_response': ai_response,
-            'filename': wav_name
+        # Return the file directly
+        return FileResponse(wav_path, media_type='audio/wav', headers={
+            'X-User-Text': base64.b64encode(user_text.encode('utf-8')).decode('utf-8'),
+            'X-AI-Response': base64.b64encode(ai_response.encode('utf-8')).decode('utf-8')
         })
 
     except Exception as e:
@@ -629,9 +643,20 @@ async def generate_prompt_response(prompt: PromptInput):
             chat_session = ChatSession(user_id=prompt.user)
             await chat_session.insert()
 
+        # Get User Settings
+        user = await User.find_one(User.user_id == prompt.user)
+        settings = user.settings if user and user.settings else UserSettings()
+
         system_instruction = """
         Eres un acompañante emocional llamado Mr. Zorro
         que genera respuestas motivadoras y positivas.
+
+        Perfil del usuario:
+        - Grupo de edad: {age}
+        - Personalidad preferida del asistente: {personality}
+        - Sobre el usuario: {about_me}
+        - Consideraciones especiales: {considerations}
+
         Basándote en el siguiente prompt del usuario y las entradas a su diario,
         genera una respuesta breve y alentadora. Las entradas del diario están en formato JSON,
         corresponden a la semana actual
@@ -640,8 +665,15 @@ async def generate_prompt_response(prompt: PromptInput):
         que podría atentar contra su vida,
         incluye en el campo 'crisis_alert' un valor true en la respuesta.
         Tu respuesta debe ser en español y no debe exceder 100 palabras.
+        Adapta tu respuesta al perfil del usuario descrito anteriormente.
         Entradas del diario: {diary_entries}
-        """.format(diary_entries=json.dumps(diary_entries, ensure_ascii=False))
+        """.format(
+            age=settings.age,
+            personality=settings.personality,
+            about_me=settings.about_me or 'No especificado',
+            considerations=settings.considerations or 'Ninguna',
+            diary_entries=json.dumps(diary_entries, ensure_ascii=False)
+        )
 
         response = prompt_gemini(
             prompt=prompt.prompt,
@@ -748,9 +780,51 @@ async def get_user_purchases(user: str):
     if user_obj:
         return JSONResponse(content={"points": user_obj.points,
                                      "themes": list(user_obj.themes) if user_obj.themes else [],
-                                     "fonts": list(user_obj.fonts) if user_obj.fonts else []})
+                                     "fonts": list(user_obj.fonts) if user.fonts else []})
     else:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+@app.post("/settings")
+async def update_user_settings(request: UpdateSettingsRequest):
+    """
+    Actualiza la configuración del usuario.
+    """
+    try:
+        user = await User.find_one(User.user_id == request.user)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Convertir settings a dict, excluyendo valores None si se desea,
+        # pero aquí queremos guardar lo que viene.
+        # Usamos model_dump() para Pydantic v2 o dict() para v1. Beanie usa Pydantic.
+        settings_dict = request.settings.model_dump()
+
+        await user.update({"$set": {"settings": settings_dict}})
+
+        return JSONResponse(content={"message": "Configuración actualizada exitosamente"})
+    except Exception as e:
+        logger.error(f"Error actualizando configuración: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.get("/settings/{user_id}")
+async def get_user_settings(user_id: str):
+    """
+    Obtiene la configuración actual del usuario.
+    """
+    try:
+        user = await User.find_one(User.user_id == user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Si el usuario no tiene settings, devolver los por defecto
+        settings = user.settings if user.settings else UserSettings()
+
+        return JSONResponse(content=settings.model_dump())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo configuración: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @app.post("/signup")
 async def signup_user(SignupInput: SignupInput):
@@ -956,6 +1030,22 @@ async def last_response():
     latest = files[0]
 
     return JSONResponse(content={'status': 'ok', 'filename': latest})
+
+@app.delete("/context/{user_id}")
+async def delete_context(user_id: str):
+    """
+    Elimina el historial de chat (memoria de contexto) del usuario.
+    """
+    try:
+        chat_session = await ChatSession.find_one(ChatSession.user_id == user_id)
+        if chat_session:
+            await chat_session.delete()
+            return JSONResponse(content={"message": "Memoria de contexto eliminada exitosamente"})
+        else:
+            return JSONResponse(content={"message": "No se encontró historial para eliminar"}, status_code=404)
+    except Exception as e:
+        logger.error(f"Error eliminando contexto: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 # ============================================================================
 # PUNTO DE ENTRADA DE LA APLICACIÓN
