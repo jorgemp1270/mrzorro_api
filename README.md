@@ -2,6 +2,14 @@
 
 Backend desarrollado en Python con FastAPI para la aplicación móvil Mr. Zorro. Esta API funciona como un acompañante emocional que procesa entradas de diario, analiza imágenes usando IA y genera recomendaciones personalizadas con sistema de autenticación y streak de usuarios.
 
+## 🪁 Lo nuevo
+
+Mr. Zorro API estará despleguado en la nube con arquitectura elástica
+
+<p align="center">
+  <img src=".resources/img/diagrama.jpg" width="80%" />
+</p>
+
 ## 📄 Documentación del proyecto
 
 - **Documentación técnica**: [Mr. Zorro](.resources/docs/Documentacion_MrZorro.pdf)
