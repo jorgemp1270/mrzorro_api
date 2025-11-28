@@ -241,6 +241,15 @@ async def process_audio_with_ai(user_id: str):
 
         recordings_dir = os.path.join(BASE_DIR, 'recordings')
         os.makedirs(recordings_dir, exist_ok=True)
+
+        # Clean up previous files for this user
+        for file in os.listdir(recordings_dir):
+            if file.startswith(f"input_{user_id}_") or file.startswith(f"output_{user_id}_"):
+                try:
+                    os.remove(os.path.join(recordings_dir, file))
+                except Exception as e:
+                    logger.warning(f"Could not delete old file {file}: {e}")
+
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         input_filename = os.path.join(recordings_dir, f'input_{user_id}_{timestamp}.wav')
 
