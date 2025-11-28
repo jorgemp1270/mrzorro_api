@@ -356,6 +356,29 @@ backend/
 - **Método**: `DELETE`
 - **Descripción**: Elimina el historial de conversación (memoria) del usuario con el asistente.
 
+### 16. Gestión de Contactos
+- **Agregar Contacto**:
+  - **URL**: `/contacts`
+  - **Método**: `POST`
+  - **Body**: `{"user_id": "...", "name": "...", "phone": "..."}`
+- **Obtener Contactos**:
+  - **URL**: `/contacts/{user_id}`
+  - **Método**: `GET`
+- **Eliminar Contacto**:
+  - **URL**: `/contacts`
+  - **Método**: `DELETE`
+  - **Body**: `{"user_id": "...", "name": "...", "phone": "..."}`
+
+### 17. Gestión de Nivel de Peligro
+- **Obtener Nivel**:
+  - **URL**: `/danger-level/{user_id}`
+  - **Método**: `GET`
+  - **Respuesta**: `{"danger_level": 0}`
+- **Resetear Nivel**:
+  - **URL**: `/reset-danger-level/{user_id}`
+  - **Método**: `POST`
+  - **Descripción**: Resetea el contador de alertas de crisis a 0.
+
 ## 🛠️ Gestión y Monitoreo
 
 ### Ver Datos en MongoDB
