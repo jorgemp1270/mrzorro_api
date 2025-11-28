@@ -577,16 +577,35 @@ async def predict_image_endpoint(input: ImagePrediction):
             if entry.date and datetime.date.fromisoformat(entry.date) >= start_of_week
         ]
 
+        # Get User Settings
+        user = await User.find_one(User.user_id == input.user)
+        settings = user.settings if user and user.settings else UserSettings()
+
         # Generar descripción con Gemini AI
         prompt = """
         Eres un acompañante emocional llamado Mr. Zorro.
         Estas ayudando a un usuario a describir la imagen que ha subido a su diario.
+
+        Perfil del usuario:
+        - Grupo de edad: {age}
+        - Personalidad preferida del asistente: {personality}
+        - Sobre el usuario: {about_me}
+        - Consideraciones especiales: {considerations}
+
         Basándote en la etiqueta reconocida por ResNet-50: {img},
         crea una breve descripción positiva y motivadora relacionada con esa imagen.
         Basate también en las entradas previas de la semana del usuario a su diario:
         {diary_entries}
         Tu respuesta debe ser en español y no debe exceder 50 palabras.
-        """.format(img=label or "None", diary_entries=json.dumps(diary_entries, ensure_ascii=False))
+        Adapta tu respuesta al perfil del usuario descrito anteriormente.
+        """.format(
+            img=label or "None",
+            diary_entries=json.dumps(diary_entries, ensure_ascii=False),
+            age=settings.age,
+            personality=settings.personality,
+            about_me=settings.about_me or 'No especificado',
+            considerations=settings.considerations or 'Ninguna'
+        )
 
         # Generar respuesta personalizada con IA
         response = prompt_gemini(prompt, GeminiResponseModel)
@@ -664,6 +683,8 @@ async def generate_prompt_response(prompt: PromptInput):
         Si consideras que el usuario podría estar en una crisis emocional,
         que podría atentar contra su vida,
         incluye en el campo 'crisis_alert' un valor true en la respuesta.
+        Si consideras que el usuario podría estar en una crisis medica,
+        incluye en el campo 'medical_alert' un valor true en la respuesta.
         Tu respuesta debe ser en español y no debe exceder 100 palabras.
         Adapta tu respuesta al perfil del usuario descrito anteriormente.
         Entradas del diario: {diary_entries}
@@ -780,7 +801,7 @@ async def get_user_purchases(user: str):
     if user_obj:
         return JSONResponse(content={"points": user_obj.points,
                                      "themes": list(user_obj.themes) if user_obj.themes else [],
-                                     "fonts": list(user_obj.fonts) if user.fonts else []})
+                                     "fonts": list(user_obj.fonts) if user_obj.fonts else []})
     else:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
