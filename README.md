@@ -21,7 +21,7 @@ Este proyecto es parte de un ecosistema más grande. Revisa los otros repositori
 - **IA Generativa**: Integración con Google Gemini AI para recomendaciones personalizadas
 - **Memoria de Contexto**: Historial de chat persistente para conversaciones coherentes con Mr. Zorro
 - **Personalización**: Configuración de perfil de usuario (edad, personalidad, consideraciones) para adaptar las respuestas de la IA
-- **Sistema de Seguridad**: Detección automática de palabras clave de crisis con respuestas de seguridad inmediatas
+- **Sistema de Seguridad**: Detección de crisis, gestión de nivel de peligro y contactos de emergencia
 - **Asistente de Voz**: Procesamiento de audio con Whisper (STT) y gTTS (TTS) para interacción por voz
 - **Base de datos MongoDB**: Almacenamiento escalable con Beanie ODM
 - **API RESTful**: Endpoints completos para gestión de diario, configuración y contexto
@@ -542,7 +542,7 @@ python scripts/migrate_data.py
 ### 8. Predecir etiqueta de imagen independiente
 - **URL**: `/predict-image`
 - **Método**: `POST`
-- **Descripción**: Predice la etiqueta de una imagen sin actualizar ningún diario
+- **Descripción**: Predice la etiqueta de una imagen y genera una descripción personalizada basada en el perfil del usuario.
 - **Cuerpo de la petición**:
 ```json
 {
@@ -556,18 +556,19 @@ python scripts/migrate_data.py
 - **Respuesta exitosa**:
 ```json
 {
-    "predicted_label": "etiqueta_predicha",
-    "diary_context": {
-        "recent_entries": [...],
-        "ai_description": "Descripción generada por IA basada en entradas recientes"
-    }
+    "overview": {
+        "message": "...",
+        "recommendation": "...",
+        "interesting_fact": "..."
+    },
+    "img": "etiqueta_predicha"
 }
 ```
 
 ### 9. Generar respuesta con prompt personalizado
 - **URL**: `/prompt`
 - **Método**: `POST`
-- **Descripción**: Genera una respuesta personalizada usando IA basada en las entradas del diario de la semana actual del usuario
+- **Descripción**: Genera una respuesta personalizada usando Gemini AI basada en prompt, entradas de la semana y perfil del usuario. Detecta alertas de crisis.
 - **Cuerpo de la petición**:
 ```json
 {
@@ -579,13 +580,16 @@ python scripts/migrate_data.py
   - `user` (string, requerido): ID único del usuario
   - `prompt` (string, requerido): Pregunta o prompt del usuario
 - **Funcionalidad**:
-  - Analiza las entradas del diario de la semana actual (desde el lunes) del usuario específico
-  - Envía solo los campos `mood`, `note` e `img` a la IA
-  - Genera una respuesta motivadora y personalizada
+  - Analiza las entradas del diario de la semana actual
+  - Considera el perfil del usuario (edad, personalidad, etc.)
+  - Mantiene historial de conversación (contexto)
+  - Detecta crisis y aumenta nivel de peligro si es necesario
 - **Respuesta exitosa**:
 ```json
 {
-    "response": "Respuesta motivadora basada en tu semana..."
+    "response": "Respuesta motivadora...",
+    "crisis_alert": false,
+    "medical_alert": false
 }
 ```
 - **Respuesta error (400)**:
@@ -597,11 +601,100 @@ python scripts/migrate_data.py
 
 ## 📊 Base de Datos
 
+### 10. Procesamiento de Audio (ESP32)
+- **URL**: `/audio`
+- **Método**: `POST`
+- **Descripción**: Recibe chunks de audio, los procesa con Whisper y genera respuesta con Gemini.
+- **Headers**:
+  - `X-Chunk-Number`: Número de secuencia del chunk
+  - `X-Last-Chunk`: "true" si es el último chunk
+  - `X-User-Id`: ID del usuario
+- **Funcionalidad**:
+  - Transcribe audio a texto
+  - Detecta crisis en el texto transcrito
+  - Genera respuesta de audio (TTS)
+  - Mantiene contexto de conversación
+- **Respuesta**:
+```json
+{
+    "status": "ok",
+    "user_text": "...",
+    "ai_response": "...",
+    "filename": "output_..."
+}
+```
+
+### 11. Gestión de Contactos
+- **URL**: `/contacts`
+- **Método**: `POST`
+- **Descripción**: Agrega un contacto de emergencia.
+- **Cuerpo**:
+```json
+{
+    "user_id": "user_...",
+    "name": "Mamá",
+    "phone": "1234567890"
+}
+```
+
+- **URL**: `/contacts/{user_id}`
+- **Método**: `GET`
+- **Descripción**: Obtiene la lista de contactos de un usuario.
+
+- **URL**: `/contacts`
+- **Método**: `DELETE`
+- **Descripción**: Elimina un contacto.
+- **Cuerpo**:
+```json
+{
+    "user_id": "user_...",
+    "name": "Mamá",
+    "phone": "1234567890"
+}
+```
+
+### 12. Configuración de Usuario
+- **URL**: `/settings`
+- **Método**: `POST`
+- **Descripción**: Actualiza perfil y preferencias del usuario.
+- **Cuerpo**:
+```json
+{
+    "user": "user_...",
+    "settings": {
+        "age": 25,
+        "personality": "Amable",
+        "considerations": "Ansiedad",
+        "about_me": "Me gusta el arte"
+    }
+}
+```
+
+- **URL**: `/settings/{user_id}`
+- **Método**: `GET`
+- **Descripción**: Obtiene la configuración actual.
+
+### 13. Nivel de Peligro
+- **URL**: `/danger-level/{user_id}`
+- **Método**: `GET`
+- **Descripción**: Obtiene el nivel de riesgo acumulado del usuario.
+
+- **URL**: `/reset-danger-level/{user_id}`
+- **Método**: `POST`
+- **Descripción**: Reinicia el nivel de peligro a 0.
+
+### 14. Contexto de Chat
+- **URL**: `/context/{user_id}`
+- **Método**: `GET`
+- **Descripción**: Obtiene el historial de conversación actual.
+
+## 📊 Base de Datos
+
 La aplicación utiliza MongoDB como base de datos principal con las siguientes colecciones:
 
 ### **Colección: users**
 - **Usuarios registrados** con credenciales, streak y sistema de puntos
-- **Campos**: `user_id` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`, `points`, `created_at`
+- **Campos**: `user_id` (ID único), `email`, `password`, `nickname`, `last_login`, `streak`, `best_streak`, `points`, `created_at`, `danger_level`, `contacts`, `settings`, `themes`, `fonts`
 - **Indexes**: `user_id` (único), `email` (único)
 
 ### **Colección: diary_entries**
@@ -610,6 +703,15 @@ La aplicación utiliza MongoDB como base de datos principal con las siguientes c
 - **Etiquetas de imágenes** procesadas por ResNet-50
 - **Respuestas generadas por IA** (overview con mensaje, recomendación y dato curioso)
 - **Indexes**: `user_id + date` (compuesto único), `user_id`, `date`
+
+### **Colección: chat_sessions**
+- **Historial de chat** persistente para cada usuario
+- **Campos**: `user_id`, `history` (lista de mensajes user/model), `updated_at`
+- **Indexes**: `user_id` (único)
+
+### **Colección: therapists**
+- **Terapeutas registrados** (Uso futuro)
+- **Campos**: `therapist_id`, `name`, `email`, `password`, `specialization`, etc.
 
 <p align="center">
   <img src=".resources/img/mrzorro_db.png" width="80%" />
