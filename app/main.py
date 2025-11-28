@@ -435,17 +435,37 @@ async def add_diary_entry(entry: DiaryEntry):
         predicted_label = predict_image_label(entry.img)
         logger.info(f"Imagen analizada: {predicted_label}")
 
+    # Get User Settings
+    user = await User.find_one(User.user_id == entry.user)
+    settings = user.settings if user and user.settings else UserSettings()
+
     # Crear prompt para Gemini AI
     prompt = """
     Eres un acompañante emocional llamado Mr. Zorro
     que genera recomendaciones diarias positivas y motivadoras.
+
+    Perfil del usuario:
+    - Grupo de edad: {age}
+    - Personalidad preferida del asistente: {personality}
+    - Sobre el usuario: {about_me}
+    - Consideraciones especiales: {considerations}
+
     Basándote en la emoción del usuario: {mood}, en su nota agregada: {note} y
     en la etiqueta de la imagen que han guardado como recuerdo del día: {img},
     crea una recomendación breve y alentadora, un dato curioso o especial para el día.
-    Tu respuesta debe ser en español y no debe exceder 100 palabras."""
+    Tu respuesta debe ser en español y no debe exceder 100 palabras.
+    Adapta tu respuesta al perfil del usuario descrito anteriormente."""
 
     # Llenar el prompt con los datos del usuario
-    filled_prompt = prompt.format(mood=entry.mood, note=entry.note or "None", img=predicted_label or "None")
+    filled_prompt = prompt.format(
+        mood=entry.mood,
+        note=entry.note or "None",
+        img=predicted_label or "None",
+        age=settings.age,
+        personality=settings.personality,
+        about_me=settings.about_me or 'No especificado',
+        considerations=settings.considerations or 'Ninguna'
+    )
 
     # Generar respuesta personalizada con IA
     overview = prompt_gemini(filled_prompt, GeminiResponseModel)
